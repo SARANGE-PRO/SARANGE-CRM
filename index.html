@@ -16,7 +16,6 @@
 
   <style>
     body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }
-    /* Evite le zoom sur input mobile */
     input, textarea, select { font-size: 16px; } 
     .no-select { user-select: none; -webkit-user-select: none; }
   </style>
@@ -26,18 +25,18 @@
   <div id="root" class="flex items-center justify-center h-screen text-slate-500">
     <div class="text-center">
       <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-4"></div>
-      <p>Chargement des modules...</p>
+      <p>Chargement...</p>
     </div>
   </div>
 
   <script type="text/babel" data-type="module">
     
-    // --- 0. IMPORTS MODERNES (ESM) ---
     import React, { useState, useEffect, useRef, useMemo, createContext, useContext } from 'https://esm.sh/react@18.2.0';
     import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+    // Ajout de MessageCircle pour l'icône WhatsApp
     import { 
       Plus, Trash2, Save, ArrowLeft, FileText, Check, AlertTriangle, 
-      PenTool, X, ChevronDown, ChevronUp, Share, Printer, CheckCircle, Download, Eye, Clock
+      PenTool, X, ChevronDown, ChevronUp, Share, Printer, CheckCircle, Download, Eye, Clock, MessageCircle
     } from 'https://esm.sh/lucide-react@0.263.1';
 
     // --- 1. LOGIQUE METIER ---
@@ -103,6 +102,8 @@
       const variants = {
         primary: "bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300",
         secondary: "bg-slate-100 text-slate-700 hover:bg-slate-200",
+        whatsapp: "bg-green-500 text-white hover:bg-green-600 shadow-md", // Nouveau style WhatsApp
+        dark: "bg-slate-700 text-white hover:bg-slate-800",
         danger: "bg-red-50 text-red-600 hover:bg-red-100",
       };
       return (
@@ -455,7 +456,7 @@
 
     // --- 5. EXPORT ---
     
-    // NOUVELLE FONCTION POUR GENERER LE SVG DU DESSIN
+    // SVG GEN
     const generateSVGFromDrawing = (drawing) => {
         if (!drawing || !drawing.lines || drawing.lines.length === 0) return 'Aucun dessin';
         const width = 350;
@@ -493,13 +494,13 @@
         .tech-val { color: #0f172a; font-weight: 500; }
         .tech-val.highlight { color: #2563EB; }
         .tech-val.alert { color: #d97706; }
-        /* Style modifié pour accueillir le SVG */
         .drawing-box { border: 1px dashed #cbd5e1; width: 100%; height: 180px; display: flex; align-items: center; justify-content: center; font-style: italic; color: #94a3b8; overflow: hidden; }
         .final-stamp { text-align: right; font-size: 0.8em; color: #94a3b8; margin-top: 50px; border-top: 1px solid #eee; padding-top: 10px; }
         @media print { .no-print { display: none; } button { display: none; } body { padding: 0; } }
       `;
 
-      let html = `<html><head><meta charset="utf-8"><title>Relevé - ${chantier.client}</title><style>${styles}</style></head><body><div class="no-print" style="margin-bottom:20px; text-align:right;"><button onclick="window.print()" style="background:#2563EB; color:white; padding:10px 20px; border:none; border-radius:6px; cursor:pointer;">Imprimer / PDF</button></div><h1>SARANGE - Fiche Fabrication</h1><table class="header-table"><tr><td><div class="header-label">Client</div><div class="header-value">${chantier.client}</div><div class="header-label">Adresse</div><div class="header-value">${chantier.adresse}</div><div class="header-label">Contacts</div><div class="header-value">Tél: ${chantier.telephone} ${chantier.email ? `<br>Email: ${chantier.email}` : ''}</div></td><td><div class="header-label">Contrat</div><div class="header-value" style="color:${chantier.typeContrat === 'FOURNITURE_ET_POSE' ? '#16a34a' : '#2563EB'}">${chantier.typeContrat === 'FOURNITURE_ET_POSE' ? '✅ FOURNITURE ET POSE' : '📦 FOURNITURE SEULE'}</div><div class="header-label">Technicien</div><div class="header-value">${chantier.technicien || '-'}</div><div class="header-label">Date Relevé</div><div class="header-value">${new Date(chantier.date).toLocaleDateString()}</div></td></tr></table><div class="stats-bar"><div class="stat-item"><strong>${products.length}</strong> Produits</div><div class="stat-item"><strong>${products.filter(p => !!p.dessin?.lines.length).length}</strong> Dessins</div><div class="stat-item" style="color:#d97706"><strong>${products.filter(p => p.largeurMm && p.largeurMm < 100).length}</strong> Cotes Suspectes</div></div><h3>Détails Techniques (Atelier)</h3>`;
+      // MODIFICATION 1 & 3: Titre "Fiche métrage" et suppression Technicien
+      let html = `<html><head><meta charset="utf-8"><title>Relevé - ${chantier.client}</title><style>${styles}</style></head><body><div class="no-print" style="margin-bottom:20px; text-align:right;"><button onclick="window.print()" style="background:#2563EB; color:white; padding:10px 20px; border:none; border-radius:6px; cursor:pointer;">Imprimer / PDF</button></div><h1>SARANGE - Fiche métrage</h1><table class="header-table"><tr><td><div class="header-label">Client</div><div class="header-value">${chantier.client}</div><div class="header-label">Adresse</div><div class="header-value">${chantier.adresse}</div><div class="header-label">Contacts</div><div class="header-value">Tél: ${chantier.telephone} ${chantier.email ? `<br>Email: ${chantier.email}` : ''}</div></td><td><div class="header-label">Contrat</div><div class="header-value" style="color:${chantier.typeContrat === 'FOURNITURE_ET_POSE' ? '#16a34a' : '#2563EB'}">${chantier.typeContrat === 'FOURNITURE_ET_POSE' ? '✅ FOURNITURE ET POSE' : '📦 FOURNITURE SEULE'}</div><div class="header-label">Date Relevé</div><div class="header-value">${new Date(chantier.date).toLocaleDateString()}</div></td></tr></table><div class="stats-bar"><div class="stat-item"><strong>${products.length}</strong> Produits</div><div class="stat-item"><strong>${products.filter(p => !!p.dessin?.lines.length).length}</strong> Dessins</div><div class="stat-item" style="color:#d97706"><strong>${products.filter(p => p.largeurMm && p.largeurMm < 100).length}</strong> Cotes Suspectes</div></div><h3>Détails Techniques (Atelier)</h3>`;
 
       products.forEach(p => {
         let rows = '';
@@ -528,7 +529,6 @@
         if(p.type === 'AUTRE') addRow('Description', p.description);
         if(p.notes) rows += `<tr><td class="tech-label">Notes</td><td class="tech-val" style="font-style:italic; background:#fffbe0; padding:5px;">${p.notes}</td></tr>`;
         
-        // ICI: ON APPELLE LA FONCTION DE GENERATION SVG
         html += `<div class="product-block" style="${!p.isValid ? 'border-color: #dc2626' : ''}"><div class="product-header"><span>#${String(p.index).padStart(2,'0')} - ${p.type}</span>${!p.isValid ? '<span style="color:#dc2626; font-size:0.8em">⚠ INFO MANQUANTE</span>' : ''}</div><div class="grid-layout"><div class="specs-col"><table class="tech-table">${rows}</table></div><div class="visual-col"><div class="drawing-box">${generateSVGFromDrawing(p.dessin)}</div></div></div></div>`;
       });
       html += `<div class="final-stamp">Dossier finalisé le ${new Date(finalizationDate).toLocaleString('fr-FR')}</div></body></html>`;
@@ -605,19 +605,55 @@
     const FinalizeModal = ({ chantier, products, onClose, onUpdateChantier }) => {
       const incompletes = products.filter(p => !p.isValid);
       const warnings = products.filter(p => ValidationService.isMeasureSuspicious(p.largeurMm) || ValidationService.isMeasureSuspicious(p.hauteurMm));
-      const [exported, setExported] = useState(false);
+      const [isExporting, setIsExporting] = useState(false);
 
-      const handleDownload = () => {
+      // Préparation du fichier
+      const prepareFile = () => {
         const finalizationTime = new Date().toISOString();
         onUpdateChantier(chantier.id, { dateFinalisation: finalizationTime });
         const html = generateReportHTML(chantier, products, finalizationTime);
         const blob = new Blob([html], { type: 'text/html' });
+        
+        // MODIFICATION 2: Format de date JJ-MM-AAAA
+        const dateObj = new Date(finalizationTime);
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const year = dateObj.getFullYear();
+        const filename = `Metrage_${chantier.client.replace(/\s+/g, '_')}_${day}-${month}-${year}.html`;
+
+        return { blob, filename };
+      };
+
+      // MODIFICATION 4A: Fonction de Téléchargement Classique
+      const handleDownload = () => {
+        const { blob, filename } = prepareFile();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Export_${chantier.client.replace(/\s+/g, '_')}_${finalizationTime.split('T')[0]}.html`;
+        a.download = filename;
         a.click();
-        setExported(true);
+        setIsExporting(true);
+      };
+
+      // MODIFICATION 4B: Fonction de Partage WhatsApp (Web Share API)
+      const handleShare = async () => {
+        try {
+          const { blob, filename } = prepareFile();
+          const file = new File([blob], filename, { type: 'text/html' });
+
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'Fiche Métrage',
+              text: `Voici le relevé pour ${chantier.client}`
+            });
+            setIsExporting(true);
+          } else {
+            alert("Le partage direct de fichier n'est pas supporté sur cet appareil. Utilisez le bouton 'Télécharger' ci-dessous.");
+          }
+        } catch (error) {
+          console.error("Erreur partage:", error);
+        }
       };
 
       return (
@@ -639,9 +675,35 @@
                 <div className="text-xs text-amber-600">Certains produits ont des cotes inférieures à 100mm. Vérifiez si c'est normal.</div>
               </div>
             )}
+            
             <div className="flex flex-col gap-3 mt-6">
-              <button onClick={handleDownload} disabled={incompletes.length > 0} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center disabled:bg-slate-300"><Download size={20} className="mr-2"/> Sauvegarder & Exporter (HTML)</button>
-              {exported && <div className="text-center text-sm text-green-600 font-bold bg-green-50 p-2 rounded">Fichier téléchargé et heure enregistrée !</div>}
+              
+              {/* BOUTON WHATSAPP */}
+              <button 
+                onClick={handleShare} 
+                disabled={incompletes.length > 0} 
+                className="w-full bg-green-500 text-white hover:bg-green-600 py-3 rounded-lg font-bold flex items-center justify-center disabled:bg-slate-300 transition-colors shadow-md"
+              >
+                <MessageCircle size={24} className="mr-2"/> Partager (WhatsApp...)
+              </button>
+
+              <div className="flex items-center my-2">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink-0 mx-4 text-slate-400 text-sm">OU</span>
+                <div className="flex-grow border-t border-slate-200"></div>
+              </div>
+
+              {/* BOUTON DOWNLOAD */}
+              <button 
+                onClick={handleDownload} 
+                disabled={incompletes.length > 0} 
+                className="w-full bg-slate-700 text-white hover:bg-slate-800 py-3 rounded-lg font-bold flex items-center justify-center disabled:bg-slate-300 transition-colors"
+              >
+                <Download size={20} className="mr-2"/> Télécharger le fichier
+              </button>
+
+              {isExporting && <div className="text-center text-sm text-green-600 font-bold bg-green-50 p-2 rounded animate-pulse">Fichier généré avec succès !</div>}
+              
               <button onClick={onClose} className="mt-2 text-slate-500 text-sm hover:underline">Fermer</button>
             </div>
           </div>
