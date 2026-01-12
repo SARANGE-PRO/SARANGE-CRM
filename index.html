@@ -33,7 +33,6 @@
   <script type="text/babel" data-type="module">
     
     // --- 0. IMPORTS MODERNES (ESM) ---
-    // Plus besoin de variables globales, on importe directement depuis le cloud
     import React, { useState, useEffect, useRef, useMemo, createContext, useContext } from 'https://esm.sh/react@18.2.0';
     import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
     import { 
@@ -455,6 +454,24 @@
     };
 
     // --- 5. EXPORT ---
+    
+    // NOUVELLE FONCTION POUR GENERER LE SVG DU DESSIN
+    const generateSVGFromDrawing = (drawing) => {
+        if (!drawing || !drawing.lines || drawing.lines.length === 0) return 'Aucun dessin';
+        const width = 350;
+        const height = 250;
+        let paths = '';
+        drawing.lines.forEach(line => {
+            if (line.length < 2) return;
+            let d = `M ${line[0].x} ${line[0].y}`;
+            for (let i = 1; i < line.length; i++) {
+                d += ` L ${line[i].x} ${line[i].y}`;
+            }
+            paths += `<path d="${d}" stroke="#2563EB" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+        });
+        return `<svg width="100%" height="100%" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" style="background-color: #f8fafc;">${paths}</svg>`;
+    };
+
     const generateReportHTML = (chantier, products, finalizationDate) => {
       const styles = `
         body { font-family: 'Helvetica', sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; color: #1e293b; background: #fff; }
@@ -476,7 +493,8 @@
         .tech-val { color: #0f172a; font-weight: 500; }
         .tech-val.highlight { color: #2563EB; }
         .tech-val.alert { color: #d97706; }
-        .drawing-box { border: 1px dashed #cbd5e1; width: 100%; height: 180px; display: flex; align-items: center; justify-content: center; font-style: italic; color: #94a3b8; }
+        /* Style modifié pour accueillir le SVG */
+        .drawing-box { border: 1px dashed #cbd5e1; width: 100%; height: 180px; display: flex; align-items: center; justify-content: center; font-style: italic; color: #94a3b8; overflow: hidden; }
         .final-stamp { text-align: right; font-size: 0.8em; color: #94a3b8; margin-top: 50px; border-top: 1px solid #eee; padding-top: 10px; }
         @media print { .no-print { display: none; } button { display: none; } body { padding: 0; } }
       `;
@@ -509,7 +527,9 @@
         if (p.type === 'VOLET_ROULANT') { addRow('Manoeuvre', p.manoeuvre); if(p.sortieCable) addRow('Sortie Câble', p.sortieCable); if(p.coupleMoteur) addRow('Couple Moteur', `${p.coupleMoteur} Nm`); if(p.boxDomotique) addRow('Box Domotique', `OUI ${p.boxDomotiqueNote ? `(${p.boxDomotiqueNote})` : ''}`); if(p.pose) addRow('Type de Pose', p.pose); if(p.monobloc) addRow('Monobloc', `OUI (Déduction coffre: -${p.coffreADeduireMm}mm)`); if(p.lieAProduitId) addRow('Lié au produit', `Liaison ID: #${products.find(x=>x.id===p.lieAProduitId)?.index}`); }
         if(p.type === 'AUTRE') addRow('Description', p.description);
         if(p.notes) rows += `<tr><td class="tech-label">Notes</td><td class="tech-val" style="font-style:italic; background:#fffbe0; padding:5px;">${p.notes}</td></tr>`;
-        html += `<div class="product-block" style="${!p.isValid ? 'border-color: #dc2626' : ''}"><div class="product-header"><span>#${String(p.index).padStart(2,'0')} - ${p.type}</span>${!p.isValid ? '<span style="color:#dc2626; font-size:0.8em">⚠ INFO MANQUANTE</span>' : ''}</div><div class="grid-layout"><div class="specs-col"><table class="tech-table">${rows}</table></div><div class="visual-col"><div class="drawing-box">${p.dessin && p.dessin.lines.length > 0 ? 'Dessin Inclus' : 'Aucun dessin'}</div></div></div></div>`;
+        
+        // ICI: ON APPELLE LA FONCTION DE GENERATION SVG
+        html += `<div class="product-block" style="${!p.isValid ? 'border-color: #dc2626' : ''}"><div class="product-header"><span>#${String(p.index).padStart(2,'0')} - ${p.type}</span>${!p.isValid ? '<span style="color:#dc2626; font-size:0.8em">⚠ INFO MANQUANTE</span>' : ''}</div><div class="grid-layout"><div class="specs-col"><table class="tech-table">${rows}</table></div><div class="visual-col"><div class="drawing-box">${generateSVGFromDrawing(p.dessin)}</div></div></div></div>`;
       });
       html += `<div class="final-stamp">Dossier finalisé le ${new Date(finalizationDate).toLocaleString('fr-FR')}</div></body></html>`;
       return html;
