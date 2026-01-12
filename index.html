@@ -65,7 +65,7 @@
       Plus, Trash2, Save, ArrowLeft, FileText, Check, AlertTriangle, PenTool, X, 
       ChevronDown, ChevronUp, Share, Printer, CheckCircle, Download, Eye, Clock, 
       MessageCircle, MapPin, Copy, Camera, Image as ImageIcon, Moon, Sun, 
-      LayoutDashboard, Search, Settings, AlertCircle, Mail, Maximize, Droplets
+      LayoutDashboard, Search, Settings, AlertCircle, Mail, Maximize, Droplets, Edit
     } from 'https://esm.sh/lucide-react@0.263.1';
 
     // --- UTILS ---
@@ -604,10 +604,48 @@
       );
     };
 
+    // --- EDIT CHANTIER MODAL ---
+    const EditChantierModal = ({ chantier, onClose, onUpdate }) => {
+      const [f, setF] = useState({ 
+        client: chantier.client, 
+        adresse: chantier.adresse, 
+        typeContrat: chantier.typeContrat, 
+        telephone: chantier.telephone, 
+        email: chantier.email 
+      });
+      
+      const submit = () => { 
+        if (!f.client) return alert('Nom client requis'); 
+        onUpdate(f); 
+        onClose(); 
+      };
+
+      return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 shadow-2xl">
+            <h2 className="text-xl font-bold mb-6 dark:text-white">Modifier le dossier</h2>
+            <Input label="Nom Client" value={f.client} onChange={v => setF({...f, client: v})} />
+            <AddressInput value={f.adresse} onChange={v => setF({...f, adresse: v})} />
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Téléphone" value={f.telephone} onChange={v => setF({...f, telephone: v})} type="tel" inputMode="tel" pattern="[0-9]*" />
+              <Input label="Email" value={f.email} onChange={v => setF({...f, email: v})} type="email" inputMode="email" />
+            </div>
+            <SelectToggle label="Type de contrat" value={f.typeContrat} onChange={v => setF({...f, typeContrat: v})} options={[{label: 'Fourniture Seule', value: 'FOURNITURE_SEULE'}, {label: 'Fourniture & Pose', value: 'FOURNITURE_ET_POSE'}]} />
+            <div className="flex gap-3 mt-6">
+              <Button variant="secondary" onClick={onClose} className="flex-1">Annuler</Button>
+              <Button onClick={submit} className="flex-1">Enregistrer</Button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     const ChantierDetailView = () => {
       const { state, selectChantier, deleteProduct, saveProduct, updateChantier } = useApp();
       const [editingProduct, setEditingProduct] = useState(null);
       const [showFinalize, setShowFinalize] = useState(false);
+      const [isEditingClient, setIsEditingClient] = useState(false); // State for Edit Modal
+      
       const chantier = state.chantiers.find(c => c.id === state.currentChantierId);
       const products = state.products.filter(p => p.chantierId === chantier?.id).sort((a, b) => a.index - b.index);
       
@@ -643,7 +681,21 @@
       return (
         <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-950">
           <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-10 shadow-sm">
-            <div className="flex items-center flex-1 min-w-0"><button onClick={() => selectChantier(null)} className="mr-3 p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-200"><ArrowLeft size={24} /></button><div className="truncate"><h2 className="font-bold text-lg dark:text-white truncate">{chantier.client}</h2><div className="text-xs text-slate-500 flex items-center gap-2"><span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{totalItems} Produit(s)</span><span>• {chantier.typeContrat === 'FOURNITURE_ET_POSE' ? 'Pose' : 'Fourn. Seule'}</span></div></div></div>
+            <div className="flex items-center flex-1 min-w-0">
+              <button onClick={() => selectChantier(null)} className="mr-3 p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-200">
+                <ArrowLeft size={24} />
+              </button>
+              <div className="truncate flex-1 cursor-pointer" onClick={() => setIsEditingClient(true)}>
+                <div className="flex items-center gap-2">
+                    <h2 className="font-bold text-lg dark:text-white truncate">{chantier.client}</h2>
+                    <Edit size={16} className="text-slate-400" />
+                </div>
+                <div className="text-xs text-slate-500 flex items-center gap-2">
+                    <span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{totalItems} Produit(s)</span>
+                    <span>• {chantier.typeContrat === 'FOURNITURE_ET_POSE' ? 'Pose' : 'Fourn. Seule'}</span>
+                </div>
+              </div>
+            </div>
             <Button onClick={() => setShowFinalize(true)} className="ml-2 px-3 py-2 text-sm shadow-sm" icon={Check}>Finaliser</Button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 max-w-5xl mx-auto w-full pb-24">
@@ -661,6 +713,13 @@
             </div>
           </div>
           {showFinalize && <FinalizeModal chantier={chantier} products={products} onClose={() => setShowFinalize(false)} onUpdate={(d) => updateChantier(chantier.id, d)} />}
+          {isEditingClient && (
+            <EditChantierModal 
+                chantier={chantier} 
+                onClose={() => setIsEditingClient(false)} 
+                onUpdate={(data) => updateChantier(chantier.id, data)} 
+            />
+          )}
         </div>
       );
     };
