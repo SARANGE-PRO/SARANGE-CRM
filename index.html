@@ -2,41 +2,80 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Sarange Pro</title>
+  
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <meta name="theme-color" content="#2563EB">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    tailwind.config = { darkMode: 'class', theme: { extend: { colors: { slate: { 750: '#2d3748', 850: '#1a202c', 950: '#171923' } } } } }
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            slate: { 850: '#1a202c', 900: '#0f172a', 950: '#020617' },
+            brand: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563EB', 700: '#1d4ed8' }
+          },
+          screens: { 'xs': '480px' }
+        }
+      }
+    }
   </script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
   <style>
-    body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }
-    input, textarea, select { font-size: 16px; } 
+    body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; font-family: system-ui, -apple-system, sans-serif; }
+    input, textarea, select, button { font-size: 16px; touch-action: manipulation; } 
     .no-select { user-select: none; -webkit-user-select: none; }
-    .suggestions-list { max-height: 200px; overflow-y: auto; position: absolute; z-index: 50; width: 100%; background: white; border: 1px solid #e2e8f0; border-radius: 0 0 0.5rem 0.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-    .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; margin-top: 10px; }
-    .photo-thumb { width: 100%; height: 80px; object-fit: cover; border-radius: 6px; border: 1px solid #e2e8f0; position: relative; }
-    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .safe-pb { padding-bottom: env(safe-area-inset-bottom, 20px); }
+    
+    /* Autocomplete */
+    .suggestions-list { max-height: 250px; overflow-y: auto; position: absolute; z-index: 50; width: 100%; background: white; border: 1px solid #e2e8f0; border-radius: 0.5rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); margin-top: 4px; }
+    .dark .suggestions-list { background: #1e293b; border-color: #334155; }
+    
+    /* Photos */
+    .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; margin-top: 10px; }
+    .photo-thumb { width: 100%; height: 100px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .dark ::-webkit-scrollbar-thumb { background: #475569; }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-white no-select transition-colors duration-200">
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200">
   
-  <div id="root" class="flex items-center justify-center h-screen text-slate-500">
-    <div class="text-center"><div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-4"></div><p>Chargement...</p></div>
+  <div id="root" class="h-screen flex flex-col">
+    <div class="m-auto flex flex-col items-center justify-center text-slate-400">
+      <div class="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-brand-600 mb-4"></div>
+      <p class="font-medium">Chargement...</p>
+    </div>
   </div>
 
-  <script type="text/babel" data-type="module">
+  <script type="text/babel" data-type="module" data-presets="react">
     import React, { useState, useEffect, useRef, useMemo, createContext, useContext } from 'https://esm.sh/react@18.2.0';
     import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
-    import { Plus, Trash2, Save, ArrowLeft, FileText, Check, AlertTriangle, PenTool, X, ChevronDown, ChevronUp, Share, Printer, CheckCircle, Download, Eye, Clock, MessageCircle, MapPin, Copy, Camera, Image as ImageIcon, Moon, Sun, Home, LayoutDashboard, Link as LinkIcon } from 'https://esm.sh/lucide-react@0.263.1';
+    import { 
+      Plus, Trash2, Save, ArrowLeft, FileText, Check, AlertTriangle, PenTool, X, 
+      ChevronDown, ChevronUp, Share, Printer, CheckCircle, Download, Eye, Clock, 
+      MessageCircle, MapPin, Copy, Camera, Image as ImageIcon, Moon, Sun, 
+      LayoutDashboard, Search, AlertCircle, Link as LinkIcon 
+    } from 'https://esm.sh/lucide-react@0.263.1';
 
-    /* --- 1. SERVICES --- */
-    const generateUUID = () => Math.random().toString(36).substring(2) + Date.now().toString(36);
+    // --- UTILS ---
+    const generateUUID = () => {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    };
 
     const compressImage = (file) => {
         return new Promise((resolve) => {
@@ -49,11 +88,11 @@
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
                     const maxWidth = 1000; 
-                    const scale = maxWidth / img.width;
-                    canvas.width = maxWidth;
+                    const scale = Math.min(1, maxWidth / img.width);
+                    canvas.width = img.width * scale;
                     canvas.height = img.height * scale;
                     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    resolve(canvas.toDataURL('image/jpeg', 0.7));
+                    resolve(canvas.toDataURL('image/jpeg', 0.65));
                 };
             };
         });
@@ -73,21 +112,24 @@
         } else { 
           if (!p.description) err.push("description"); 
         }
+        
         if (['FENETRE', 'BAIE_COULISSANTE', 'PORTE_ENTREE', 'PORTE_SERVICE'].includes(p.type)) {
           if (!p.matiere) err.push("matiere"); 
           if (!p.profil) err.push("profil"); 
           if (!p.couleur) err.push("couleur");
           if (p.couleur === 'AUTRE' && !p.couleurAutre) err.push("couleurAutre"); 
           if (p.profil === 'ISO' && !p.isoMm) err.push("isoMm");
+          
           if (['FENETRE', 'BAIE_COULISSANTE'].includes(p.type)) {
              const v = p.vitrageFlags || {};
-             if (!v.standard && !v.g200 && !v.feuillete1f && !v.feuillete2f && !v.autre) err.push("vitrageFlags");
+             if (!Object.values(v).some(val => val === true)) err.push("vitrageFlags");
           }
           if (p.type === 'PORTE_ENTREE') { 
             if (!p.remplissage) err.push("remplissage"); 
             if (p.tierce && !p.cotePassageMm) err.push("cotePassageMm"); 
           }
         }
+        
         if (p.type === 'VOLET_ROULANT') {
           if (!p.manoeuvre) err.push("manoeuvre"); 
           if ((p.manoeuvre === 'FILAIRE' || p.manoeuvre === 'RADIO') && !p.sortieCable && p.manoeuvre !== 'SOLAIRE') err.push("sortieCable");
@@ -105,7 +147,7 @@
     };
 
     const generateReportHTML = (c, products, date) => {
-      const styles = `body{font-family:'Helvetica',sans-serif;max-width:900px;margin:0 auto;padding:20px;color:#1e293b;background:#fff}h1{color:#2563EB;border-bottom:2px solid #2563EB;padding-bottom:10px;font-size:24px}.header-table{width:100%;border-collapse:collapse;margin-bottom:20px;background:#f8fafc;border:1px solid #e2e8f0}.header-table td{padding:12px;vertical-align:top;width:50%}.header-label{font-weight:bold;color:#64748b;font-size:0.9em;text-transform:uppercase}.header-value{font-size:1.1em;color:#0f172a;margin-bottom:8px}.stats-bar{display:flex;gap:15px;margin-bottom:30px}.stat-item{flex:1;background:#eff6ff;padding:10px;border:1px solid #dbeafe;border-radius:6px;text-align:center}.product-block{border:2px solid #cbd5e1;margin-bottom:25px;page-break-inside:avoid;border-radius:8px;overflow:hidden}.product-header{background:#f1f5f9;padding:10px 15px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #cbd5e1;font-weight:bold;font-size:1.1em}.grid-layout{display:grid;grid-template-columns:2fr 1fr;gap:0}.specs-col{padding:15px;border-right:1px solid #e2e8f0}.visual-col{padding:15px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:#fcfcfc;gap:10px}.tech-table{width:100%;border-collapse:collapse;font-size:0.95em}.tech-table td{padding:4px 0;vertical-align:top}.tech-label{width:160px;color:#64748b;font-weight:600}.tech-val{color:#0f172a;font-weight:500}.tech-val.alert{color:#d97706}.drawing-box{border:1px dashed #cbd5e1;width:100%;height:180px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:10px}.photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;width:100%}.photo-thumb{width:100%;height:100px;object-fit:cover;border:1px solid #ccc;border-radius:4px}.final-stamp{text-align:right;font-size:0.8em;color:#94a3b8;margin-top:50px;border-top:1px solid #eee;padding-top:10px}@media print{.no-print{display:none}button{display:none}body{padding:0}}`;
+      const styles = `body{font-family:'Helvetica',sans-serif;max-width:900px;margin:0 auto;padding:20px;color:#1e293b;background:#fff}h1{color:#2563EB;border-bottom:2px solid #2563EB;padding-bottom:10px;font-size:24px}.header-table{width:100%;border-collapse:collapse;margin-bottom:20px;background:#f8fafc;border:1px solid #e2e8f0}.header-table td{padding:12px;vertical-align:top;width:50%}.header-label{font-weight:bold;color:#64748b;font-size:0.9em;text-transform:uppercase}.header-value{font-size:1.1em;color:#0f172a;margin-bottom:8px}.stats-bar{display:flex;gap:15px;margin-bottom:30px}.stat-item{flex:1;background:#eff6ff;padding:10px;border:1px solid #dbeafe;border-radius:6px;text-align:center}.product-block{border:2px solid #cbd5e1;margin-bottom:25px;page-break-inside:avoid;border-radius:8px;overflow:hidden}.product-header{background:#f1f5f9;padding:10px 15px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #cbd5e1;font-weight:bold;font-size:1.1em}.grid-layout{display:grid;grid-template-columns:2fr 1fr;gap:0}.specs-col{padding:15px;border-right:1px solid #e2e8f0}.visual-col{padding:15px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:#fcfcfc;gap:10px}.tech-table{width:100%;border-collapse:collapse;font-size:0.95em}.tech-table td{padding:4px 0;vertical-align:top}.tech-label{width:160px;color:#64748b;font-weight:600}.tech-val{color:#0f172a;font-weight:500}.tech-val.alert{color:#d97706}.drawing-box{border:1px dashed #cbd5e1;width:100%;height:180px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:10px}.photo-thumb{width:100%;height:100px;object-fit:cover;border:1px solid #ccc;border-radius:4px}.final-stamp{text-align:right;font-size:0.8em;color:#94a3b8;margin-top:50px;border-top:1px solid #eee;padding-top:10px}@media print{.no-print{display:none}button{display:none}body{padding:0}}`;
       
       let h = `<html><head><meta charset="utf-8"><title>Relevé ${c.client}</title><style>${styles}</style></head><body><div class="no-print" style="margin-bottom:20px;text-align:right;"><button onclick="window.print()" style="background:#2563EB;color:white;padding:10px 20px;border:none;border-radius:6px;cursor:pointer;">Imprimer / PDF</button></div><h1>SARANGE - Fiche métrage</h1><table class="header-table"><tr><td><div class="header-label">Client</div><div class="header-value">${c.client}</div><div class="header-label">Adresse</div><div class="header-value">${c.adresse}</div><div class="header-label">Contacts</div><div class="header-value">Tél: ${c.telephone} ${c.email?`<br>Email: ${c.email}`:''}</div></td><td><div class="header-label">Contrat</div><div class="header-value" style="color:${c.typeContrat==='FOURNITURE_ET_POSE'?'#16a34a':'#2563EB'}">${c.typeContrat==='FOURNITURE_ET_POSE'?'✅ FOURNITURE ET POSE':'📦 FOURNITURE SEULE'}</div><div class="header-label">Date Relevé</div><div class="header-value">${new Date(c.date).toLocaleDateString()}</div></td></tr></table><div class="stats-bar"><div class="stat-item"><strong>${products.reduce((a,b)=>a+(b.quantity||1),0)}</strong> Produits</div><div class="stat-item"><strong>${products.filter(p=>!!p.dessin?.lines.length).length}</strong> Dessins</div><div class="stat-item" style="color:#d97706"><strong>${products.filter(p=>ValidationService.isMeasureSuspicious(p.largeurMm,p.monobloc)).length}</strong> Cotes Suspectes</div></div><h3>Détails Techniques (Atelier)</h3>`;
 
@@ -123,7 +165,7 @@
         
         if(['FENETRE','BAIE_COULISSANTE','PORTE_ENTREE','PORTE_SERVICE'].includes(p.type)) {
           add('Matière',p.matiere); add('Profil',`${p.profil} ${p.profil==='ISO'?`(${p.isoMm}mm)`:''}`); add('Couleur',`${p.couleur} ${p.couleurAutre||''}`);
-          if(p.vitrageFlags) { const v=p.vitrageFlags; let va=[]; if(v.standard)va.push('4/20/4'); if(v.g200)va.push('G200'); if(v.feuillete1f)va.push('Feuil. 1F'); if(v.feuillete2f)va.push('Feuil. 2F'); if(va.length)add('Vitrage',va.join(', ')); }
+          if(p.vitrageFlags) { const v=p.vitrageFlags; let va=[]; if(v.standard)va.push('4/20/4'); if(v.g200)va.push('G200'); if(v.feuillete1f)va.push('SP10 (1F)'); if(v.feuillete2f)va.push('SP10 (2F)'); if(va.length)add('Vitrage',va.join(', ')); }
           
           if(p.type==='FENETRE'){ 
               add('Oscillo',p.oscilloBattant); 
@@ -162,29 +204,30 @@
     };
 
     /* --- 3. UI COMPONENTS --- */
-    const Card=({children,className=""})=><div className={`bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden ${className}`}>{children}</div>;
-    const Button=({onClick,variant='primary',children,icon:Icon,disabled=false,className=''})=>{
-      const vars={primary:"bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300",secondary:"bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200",whatsapp:"bg-green-500 text-white shadow-md",dark:"bg-slate-700 text-white",danger:"bg-red-50 text-red-600"};
-      return <button onClick={onClick} disabled={disabled} className={`flex items-center justify-center px-4 py-3 rounded-lg font-medium transition-all active:scale-95 ${vars[variant]} ${className}`}>{Icon&&<Icon size={20} className="mr-2"/>}{children}</button>;
+    const Card = ({ children, className = "" }) => <div className={`bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden ${className}`}>{children}</div>;
+    const Button = ({ onClick, variant = 'primary', children, icon: Icon, disabled = false, className = '' }) => {
+      const vars = { primary: "bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300", secondary: "bg-slate-100 text-slate-700 hover:bg-slate-200", whatsapp: "bg-green-500 text-white hover:bg-green-600 shadow-md", dark: "bg-slate-700 text-white hover:bg-slate-800", danger: "bg-red-50 text-red-600 hover:bg-red-100" };
+      return <button onClick={onClick} disabled={disabled} className={`flex items-center justify-center px-4 py-3 rounded-lg font-medium transition-all active:scale-95 touch-manipulation ${vars[variant]} ${className}`}>{Icon && <Icon size={20} className="mr-2" />}{children}</button>;
     };
+    const SectionTitle = ({ title }) => <h3 className="text-sm uppercase tracking-wider text-slate-500 font-bold mb-3 mt-6 border-b pb-1">{title}</h3>;
     
-    // NumericInput avec ID et style erreur
-    const NumericInput=({label,value,onChange,suffix="mm",id, hasError, monobloc=false})=>{
-      const susp=ValidationService.isMeasureSuspicious(value, monobloc);
-      return <div className="flex flex-col mb-4" id={id}><label className={`text-sm font-medium mb-1 ${hasError?'text-red-600':'text-slate-700 dark:text-slate-300'}`}>{label} {hasError&&'*'}</label><div className="relative"><input type="number" inputMode="numeric" pattern="[0-9]*" value={value||''} onChange={e=>onChange(e.target.value?parseInt(e.target.value):undefined)} className={`w-full p-3 text-lg border-2 rounded-lg outline-none transition-colors dark:bg-slate-900 dark:text-white ${hasError?'border-red-500 bg-red-50 dark:bg-red-900/20':susp?'border-amber-300 bg-amber-50':'border-slate-200 dark:border-slate-600 focus:border-blue-500'}`} placeholder="0"/><span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">{suffix}</span></div>{susp&&<div className="flex items-center text-amber-600 text-xs mt-1"><AlertTriangle size={12} className="mr-1"/> Attention &lt; 100{suffix}</div>}</div>;
+    // NumericInput avec ID pour scroll et gestion erreur visuelle
+    const NumericInput = ({ label, value, onChange, suffix = "mm", id, hasError, monobloc=false }) => {
+      const susp = ValidationService.isMeasureSuspicious(value, monobloc);
+      return <div className="flex flex-col mb-4" id={id}><label className={`text-sm font-medium mb-1 ${hasError ? 'text-red-600' : 'text-slate-700'}`}>{label} {hasError && '*'}</label><div className="relative"><input type="number" inputMode="numeric" pattern="[0-9]*" value={value || ''} onChange={(e) => onChange(e.target.value ? parseInt(e.target.value) : undefined)} className={`w-full p-3 text-lg border-2 rounded-lg outline-none transition-colors ${hasError ? 'border-red-500 bg-red-50' : susp ? 'border-amber-300 bg-amber-50' : 'border-slate-200 focus:border-blue-500'}`} placeholder="0" /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">{suffix}</span></div>{susp && <div className="flex items-center text-amber-600 text-xs mt-1"><AlertTriangle size={12} className="mr-1" /> Attention &lt; 100{suffix}</div>}</div>;
     };
-    const ToggleGroup=({label,options,value,onChange,id,hasError})=>{
-      return <div className="mb-4" id={id}><label className={`text-sm font-medium mb-2 block ${hasError?'text-red-600':'text-slate-700 dark:text-slate-300'}`}>{label} {hasError&&'*'}</label><div className="flex flex-wrap gap-2">{options.map(o=><button key={o.value} onClick={()=>onChange(o.value)} className={`px-4 py-2 rounded-md font-medium text-sm border transition-colors ${value===o.value?'bg-blue-600 text-white border-blue-600':'bg-white dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 text-slate-600 border-slate-200'}`}>{o.label}</button>)}</div></div>;
-    };
-    const BooleanToggle=({label,value,onChange,note,disabled,id,hasError})=>{
-      return <div id={id} className={`flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-700 last:border-0 ${disabled?'opacity-50':''} ${hasError?'bg-red-50 dark:bg-red-900/10 p-2 rounded':''}`}><div><div className="font-medium text-slate-700 dark:text-slate-200">{label}</div>{note&&<div className="text-xs text-slate-400">{note}</div>}</div><button onClick={()=>!disabled&&onChange(!value)} className={`relative w-14 h-8 rounded-full transition-colors ${value?'bg-green-500':'bg-slate-200 dark:bg-slate-600'}`}><div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${value?'translate-x-6':'translate-x-0'}`}/></button></div>;
-    };
+    const ToggleGroup = ({ label, options, value, onChange, id, hasError }) => (
+      <div className="mb-4" id={id}><label className={`text-sm font-medium mb-2 block ${hasError ? 'text-red-600' : 'text-slate-700'}`}>{label} {hasError && '*'}</label><div className="flex flex-wrap gap-2">{options.map((opt) => <button key={opt.value} onClick={() => onChange(opt.value)} className={`px-4 py-2 rounded-md font-medium text-sm border transition-colors ${value === opt.value ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-600 border-slate-200'}`}>{opt.label}</button>)}</div></div>
+    );
+    const BooleanToggle = ({ label, value, onChange, note, disabled, id, hasError }) => (
+      <div className={`flex items-center justify-between py-3 border-b border-slate-100 last:border-0 ${disabled ? 'opacity-50' : ''}`}><div><div className={`font-medium ${hasError ? 'text-red-600' : 'text-slate-700'}`}>{label}</div>{note && <div className="text-xs text-slate-400">{note}</div>}</div><button onClick={() => !disabled && onChange(!value)} className={`relative w-14 h-8 rounded-full transition-colors ${value ? 'bg-green-500' : 'bg-slate-200'}`}><div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${value ? 'translate-x-6' : 'translate-x-0'}`} /></button></div>
+    );
     const AddressAutocomplete = ({ value, onChange }) => {
       const [sug, setSug] = useState([]); const [open, setOpen] = useState(false); const ref = useRef(null);
       useEffect(() => { const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
       const handle = async (e) => { const v = e.target.value; onChange(v); if (v.length > 3) { try { const r = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(v)}&limit=5`); if(r.ok){ const d = await r.json(); setSug(d.features||[]); setOpen(true); } } catch (err) {} } else setOpen(false); };
       const geo = () => { if(navigator.geolocation) navigator.geolocation.getCurrentPosition(async p => { try { const r = await fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${p.coords.longitude}&lat=${p.coords.latitude}`); const d = await r.json(); if(d.features?.length) onChange(d.features[0].properties.label); } catch(e){} }); };
-      return <div className="relative w-full mb-3" ref={ref}><div className="relative"><input className="w-full p-2 pl-10 border rounded outline-none focus:border-blue-500 dark:bg-slate-900 dark:text-white dark:border-slate-600" placeholder="Adresse (Recherche auto...)" value={value} onChange={handle}/><MapPin size={18} className="absolute left-3 top-3 text-slate-400"/><button onClick={geo} className="absolute right-2 top-2 text-blue-500"><MapPin size={20}/></button></div>{open && sug.length > 0 && <ul className="suggestions-list dark:bg-slate-800 dark:border-slate-600">{sug.map(s => <li key={s.properties.id} onClick={() => { onChange(s.properties.label); setOpen(false); }} className="p-3 border-b dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-slate-700 cursor-pointer text-sm flex flex-col"><span className="font-medium dark:text-white">{s.properties.name}</span><span className="text-xs text-slate-500">{s.properties.postcode} {s.properties.city}</span></li>)}</ul>}</div>;
+      return <div className="relative w-full mb-3" ref={ref}><div className="relative"><input className="w-full p-2 pl-10 border rounded outline-none focus:border-blue-500" placeholder="Adresse (Recherche auto...)" value={value} onChange={handle}/><MapPin size={18} className="absolute left-3 top-3 text-slate-400"/><button onClick={geo} className="absolute right-2 top-2 text-blue-500"><MapPin size={20}/></button></div>{open && sug.length > 0 && <ul className="suggestions-list">{sug.map(s => <li key={s.properties.id} onClick={() => { onChange(s.properties.label); setOpen(false); }} className="p-3 border-b hover:bg-blue-50 cursor-pointer text-sm flex flex-col"><span className="font-medium">{s.properties.name}</span><span className="text-xs text-slate-500">{s.properties.postcode} {s.properties.city}</span></li>)}</ul>}</div>;
     };
     const DrawingCanvas = ({ data, onChange }) => {
       const ref = useRef(null); const [lines, setLines] = useState(data?.lines || []); const [draw, setDraw] = useState(false);
@@ -192,7 +235,7 @@
       const getPos = e => { const r = ref.current.getBoundingClientRect(); const t = e.touches ? e.touches[0] : e; return { x: t.clientX - r.left, y: t.clientY - r.top }; };
       const start = e => { if(e.cancelable)e.preventDefault(); setDraw(true); setLines(p => [...p, [getPos(e)]]); };
       const move = e => { if(!draw)return; if(e.cancelable)e.preventDefault(); const p = getPos(e); setLines(prev => { const n = [...prev]; n[n.length - 1] = [...n[n.length - 1], p]; return n; }); };
-      return <div className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg p-2"><div className="flex justify-between mb-2 text-sm text-slate-500"><span className="flex items-center"><PenTool size={16} className="mr-1"/> Dessin</span><div><button onClick={()=>setLines(p=>p.slice(0,-1))} className="mr-2">Annuler</button><button onClick={()=>confirm("Effacer?")&&setLines([])} className="text-red-600">Tout Effacer</button></div></div><canvas ref={ref} width={350} height={250} className="w-full h-64 bg-slate-50 dark:bg-slate-900 border border-dashed dark:border-slate-600 rounded touch-none" onMouseDown={start} onMouseMove={move} onMouseUp={()=>setDraw(false)} onMouseLeave={()=>setDraw(false)} onTouchStart={start} onTouchMove={move} onTouchEnd={()=>setDraw(false)}/></div>;
+      return <div className="bg-white border rounded-lg p-2"><div className="flex justify-between mb-2 text-sm text-slate-500"><span className="flex items-center"><PenTool size={16} className="mr-1"/> Dessin</span><div><button onClick={()=>setLines(p=>p.slice(0,-1))} className="mr-2">Annuler</button><button onClick={()=>confirm("Effacer?")&&setLines([])} className="text-red-600">Tout Effacer</button></div></div><canvas ref={ref} width={350} height={250} className="w-full h-64 bg-slate-50 border border-dashed border-slate-300 rounded touch-none" onMouseDown={start} onMouseMove={move} onMouseUp={()=>setDraw(false)} onMouseLeave={()=>setDraw(false)} onTouchStart={start} onTouchMove={move} onTouchEnd={()=>setDraw(false)}/></div>;
     };
 
     /* --- 4. APP LOGIC --- */
@@ -206,7 +249,7 @@
       const { state } = useAppStore();
       const products = state.products;
 
-      // Scroll to error
+      // Auto-scroll vers l'erreur
       useEffect(() => {
         if(errors.length > 0) {
           const el = document.getElementById(`field-${errors[0]}`);
@@ -214,6 +257,7 @@
         }
       }, [errors]);
 
+      // Logic métier
       useEffect(() => {
         if (p.type === 'FENETRE' && p.hauteurMm > 2000) setP(x => ({...x, oscilloBattant: false}));
         if (p.type === 'PORTE_ENTREE' && p.largeurMm <= 1000) setP(x => ({...x, tierce: false, cotePassageMm: undefined}));
@@ -240,10 +284,10 @@
       const colOpts = p.matiere==='PVC'?[{label:'Blanc',value:'BLANC'},{label:'Bicolor',value:'BICOLOR_7016'},{label:'Autre',value:'AUTRE'}]:[{label:'Blanc',value:'BLANC'},{label:'Gris 7016',value:'GRIS_7016'},{label:'Autre',value:'AUTRE'}];
 
       return (
-        <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900 fixed inset-0 z-50">
-          <div className="bg-white dark:bg-slate-800 px-4 py-3 border-b dark:border-slate-700 flex justify-between items-center sticky top-0 z-10 shadow-sm">
-            <button onClick={onCancel} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full"><X size={24}/></button>
-            <h2 className="font-bold text-lg dark:text-white">Produit #{String(p.index).padStart(2,'0')}</h2>
+        <div className="flex flex-col h-full bg-slate-50 fixed inset-0 z-50">
+          <div className="bg-white px-4 py-3 border-b flex justify-between items-center sticky top-0 z-10 shadow-sm">
+            <button onClick={onCancel} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full"><X size={24}/></button>
+            <h2 className="font-bold text-lg text-slate-800">Produit #{String(p.index).padStart(2,'0')}</h2>
             <button onClick={handleSave} className="flex items-center px-4 py-2 rounded-full font-medium bg-blue-600 text-white hover:bg-blue-700"><Save size={18} className="mr-2"/> OK</button>
           </div>
           {errors.length > 0 && <div className="bg-red-100 px-4 py-2 text-xs text-red-800 font-medium text-center">Champs manquants : {errors.join(', ')}</div>}
@@ -251,16 +295,18 @@
           <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-20">
             <Card className="p-4">
               <ToggleGroup label="Type" options={[{label:'Fenêtre',value:'FENETRE'},{label:'Baie',value:'BAIE_COULISSANTE'},{label:'Porte Ent.',value:'PORTE_ENTREE'},{label:'Porte Service',value:'PORTE_SERVICE'},{label:'Volet',value:'VOLET_ROULANT'},{label:'Autre',value:'AUTRE'}]} value={p.type} onChange={v=>update('type',v)}/>
-              <div className="flex justify-between items-center mb-4 bg-slate-100 dark:bg-slate-700 p-3 rounded-lg">
-                <span className="font-medium dark:text-white">Quantité</span>
-                <div className="flex items-center bg-white dark:bg-slate-800 rounded-lg border dark:border-slate-600">
+              
+              {/* QUANTITE */}
+              <div className="flex justify-between items-center mb-4 bg-slate-100 p-3 rounded-lg">
+                <span className="font-medium">Quantité</span>
+                <div className="flex items-center bg-white rounded-lg border">
                   <button className="p-2 text-xl px-4 text-blue-600" onClick={()=>update('quantity', Math.max(1, (p.quantity||1)-1))}>-</button>
-                  <span className="font-bold w-8 text-center dark:text-white">{p.quantity||1}</span>
+                  <span className="font-bold w-8 text-center">{p.quantity||1}</span>
                   <button className="p-2 text-xl px-4 text-blue-600" onClick={()=>update('quantity', (p.quantity||1)+1)}>+</button>
                 </div>
               </div>
-              <div className="mb-4"><label className="text-sm font-medium dark:text-slate-300">Localisation (Pièce)</label><input className="w-full p-2 border rounded dark:bg-slate-900 dark:text-white dark:border-slate-600" placeholder="Ex: Cuisine, Salon..." value={p.room||''} onChange={e=>update('room',e.target.value)}/></div>
-              {p.type==='AUTRE'&&<div className="mb-3" id="field-description"><label className="text-sm font-medium dark:text-slate-300">Description</label><textarea className={`w-full p-2 border rounded ${isErr('description')?'border-red-500':''}`} value={p.description||''} onChange={e=>update('description',e.target.value)}/></div>}
+
+              {p.type==='AUTRE'&&<div className="mb-3" id="field-description"><label className="text-sm font-medium">Description</label><textarea className={`w-full p-2 border rounded ${isErr('description')?'border-red-500':''}`} value={p.description||''} onChange={e=>update('description',e.target.value)}/></div>}
               <div className="grid grid-cols-2 gap-4">
                 <NumericInput id="field-largeurMm" hasError={isErr('largeurMm')} label="Largeur" value={p.largeurMm} onChange={v=>update('largeurMm',v)}/>
                 <NumericInput id="field-hauteurMm" hasError={isErr('hauteurMm')} label="Hauteur" value={p.hauteurMm} onChange={v=>update('hauteurMm',v)} monobloc={p.monobloc}/>
@@ -272,29 +318,29 @@
               <ToggleGroup id="field-matiere" hasError={isErr('matiere')} label="Matière" options={[{label:'PVC',value:'PVC'},{label:'Alu',value:'ALU'}]} value={p.matiere} onChange={v=>update('matiere',v)}/>
               {p.matiere&&<ToggleGroup id="field-profil" hasError={isErr('profil')} label="Profil" options={p.matiere==='PVC'?[{label:'Neuf',value:'NEUF'},{label:'Rénov 40',value:'RENO_40'},{label:'Rénov 60',value:'RENO_60'},{label:'ISO',value:'ISO'}]:[{label:'Neuf',value:'NEUF'},{label:'Rénov',value:'RENO'}]} value={p.profil} onChange={v=>update('profil',v)}/>}
               {p.profil==='ISO'&&<NumericInput id="field-isoMm" hasError={isErr('isoMm')} label="Aile ISO" value={p.isoMm} onChange={v=>update('isoMm',v)}/>} 
-              <div className="border-t dark:border-slate-700 pt-3">
+              <div className="border-t pt-3">
                 <ToggleGroup id="field-couleur" hasError={isErr('couleur')} label="Couleur" options={colOpts} value={p.couleur} onChange={v=>update('couleur',v)}/>
-                {p.couleur==='AUTRE'&&<input id="field-couleurAutre" className={`w-full p-2 border rounded dark:bg-slate-900 dark:text-white ${isErr('couleurAutre')?'border-red-500':''}`} placeholder="Préciser..." value={p.couleurAutre||''} onChange={e=>update('couleurAutre',e.target.value)}/>}
+                {p.couleur==='AUTRE'&&<input id="field-couleurAutre" className={`w-full p-2 border rounded ${isErr('couleurAutre')?'border-red-500':''}`} placeholder="Préciser..." value={p.couleurAutre||''} onChange={e=>update('couleurAutre',e.target.value)}/>}
               </div>
             </Card>}
 
             {(p.type==='FENETRE'||p.type==='BAIE_COULISSANTE')&&<Card className="p-4">
               <h3 id="field-vitrageFlags" className={`text-sm font-bold mb-3 uppercase ${isErr('vitrageFlags')?'text-red-500':'text-slate-500'}`}>Vitrage (Au moins 1 requis)</h3>
               <div className={`grid grid-cols-2 gap-2 mb-3 p-2 rounded ${isErr('vitrageFlags')?'bg-red-50 border border-red-200':''}`}>
-                {['standard','g200','feuillete1f','feuillete2f'].map(k=><label key={k} className="flex items-center space-x-2 p-2 border dark:border-slate-600 rounded text-sm dark:text-white"><input type="checkbox" checked={p.vitrageFlags?.[k]||false} onChange={e=>updateN('vitrageFlags',k,e.target.checked)}/><span>{k}</span></label>)}
+                {['standard','g200','feuillete1f','feuillete2f'].map(k=><label key={k} className="flex items-center space-x-2 p-2 border rounded text-sm"><input type="checkbox" checked={p.vitrageFlags?.[k]||false} onChange={e=>updateN('vitrageFlags',k,e.target.checked)}/><span>{k}</span></label>)}
               </div>
-              {p.type==='FENETRE'&&<><BooleanToggle label="Oscillo-Battant" value={p.oscilloBattant} onChange={v=>update('oscilloBattant',v)} disabled={p.hauteurMm>2000} note={p.hauteurMm>2000?"Max 2000mm":""}/><BooleanToggle label="Grille Ventil" value={p.grilleVentilation} onChange={v=>update('grilleVentilation',v)}/><div className="mt-3"><label className="text-sm font-medium dark:text-slate-300">Hauteur Poignée</label><div className="flex space-x-3 mt-1 dark:text-white"><label><input type="radio" checked={p.poigneeHauteur!=='AUTRE'} onChange={()=>update('poigneeHauteur','CENTREE')}/> Centrée</label><label><input type="radio" checked={p.poigneeHauteur==='AUTRE'} onChange={()=>update('poigneeHauteur','AUTRE')}/> Autre</label></div>{p.poigneeHauteur==='AUTRE'&&<input type="number" className="mt-2 p-2 border rounded w-32 dark:bg-slate-900 dark:text-white" placeholder="mm" value={p.poigneeHauteurMm||''} onChange={e=>update('poigneeHauteurMm',parseInt(e.target.value))}/>}</div></>}
+              {p.type==='FENETRE'&&<><BooleanToggle label="Oscillo-Battant" value={p.oscilloBattant} onChange={v=>update('oscilloBattant',v)} disabled={p.hauteurMm>2000} note={p.hauteurMm>2000?"Max 2000mm":""}/><BooleanToggle label="Grille Ventil" value={p.grilleVentilation} onChange={v=>update('grilleVentilation',v)}/><div className="mt-3"><label className="text-sm font-medium">Hauteur Poignée</label><div className="flex space-x-3 mt-1"><label><input type="radio" checked={p.poigneeHauteur!=='AUTRE'} onChange={()=>update('poigneeHauteur','CENTREE')}/> Centrée</label><label><input type="radio" checked={p.poigneeHauteur==='AUTRE'} onChange={()=>update('poigneeHauteur','AUTRE')}/> Autre</label></div>{p.poigneeHauteur==='AUTRE'&&<input type="number" className="mt-2 p-2 border rounded w-32" placeholder="mm" value={p.poigneeHauteurMm||''} onChange={e=>update('poigneeHauteurMm',parseInt(e.target.value))}/>}</div></>}
             </Card>}
 
             {p.type==='PORTE_ENTREE'&&<Card className="p-4">
               <ToggleGroup id="field-remplissage" hasError={isErr('remplissage')} label="Remplissage" options={[{label:'Panneau Déco Alu',value:'PANNEAU_DECORATIF_ALU'},{label:'Sandwich',value:'PANNEAU_SANDWICH'},{label:'Vitrée',value:'VITREE'}]} value={p.remplissage} onChange={v=>update('remplissage',v)}/>
-              {p.largeurMm>1000&&<div className="mt-3 border-t dark:border-slate-700 pt-3"><BooleanToggle label="Tierce ?" value={p.tierce} onChange={v=>update('tierce',v)}/>{p.tierce&&<NumericInput id="field-cotePassageMm" hasError={isErr('cotePassageMm')} label="Cote Passage" value={p.cotePassageMm} onChange={v=>update('cotePassageMm',v)}/>}</div>}
+              {p.largeurMm>1000&&<div className="mt-3 border-t pt-3"><BooleanToggle label="Tierce ?" value={p.tierce} onChange={v=>update('tierce',v)}/>{p.tierce&&<NumericInput id="field-cotePassageMm" hasError={isErr('cotePassageMm')} label="Cote Passage" value={p.cotePassageMm} onChange={v=>update('cotePassageMm',v)}/>}</div>}
             </Card>}
 
             {p.type==='VOLET_ROULANT'&&<Card className="p-4">
-              <div className="mb-4 bg-slate-100 dark:bg-slate-700 p-3 rounded">
-                  <label className="block text-sm font-medium mb-1 dark:text-white">Lier à une menuiserie</label>
-                  <select className="w-full p-2 border rounded dark:bg-slate-900 dark:text-white" value={p.lieAProduitId || ''} onChange={e => update('lieAProduitId', e.target.value)}>
+              <div className="mb-4 bg-slate-100 p-3 rounded">
+                  <label className="block text-sm font-medium mb-1">Lier à une menuiserie</label>
+                  <select className="w-full p-2 border rounded" value={p.lieAProduitId || ''} onChange={e => update('lieAProduitId', e.target.value)}>
                     <option value="">-- Indépendant --</option>
                     {products.filter(prod => prod.id !== p.id && ['FENETRE', 'BAIE_COULISSANTE'].includes(prod.type)).map(prod => (
                       <option key={prod.id} value={prod.id}>#{prod.index} {prod.type} {prod.largeurMm}x{prod.hauteurMm}</option>
@@ -304,12 +350,12 @@
               <ToggleGroup id="field-manoeuvre" hasError={isErr('manoeuvre')} label="Manoeuvre" options={[{label:'Filaire',value:'FILAIRE'},{label:'Radio',value:'RADIO'},{label:'Solaire',value:'SOLAIRE'}]} value={p.manoeuvre} onChange={v=>update('manoeuvre',v)}/>
               {p.manoeuvre!=='SOLAIRE'&&<ToggleGroup id="field-sortieCable" hasError={isErr('sortieCable')} label="Câble" options={[{label:'Gauche',value:'GAUCHE'},{label:'Droite',value:'DROITE'}]} value={p.sortieCable} onChange={v=>update('sortieCable',v)}/>}
               {p.manoeuvre!=='FILAIRE' && <BooleanToggle label="Box Domotique" value={p.boxDomotique} onChange={v=>update('boxDomotique',v)}/>}
-              <div className="mt-3 pt-3 border-t dark:border-slate-700">
+              <div className="mt-3 pt-3 border-t">
                 <BooleanToggle label="Monobloc ?" value={p.monobloc} onChange={v=>update('monobloc',v)}/>{p.monobloc&&<div id="field-coffreADeduireMm"><NumericInput id="field-coffreADeduireMm" hasError={isErr('coffreADeduireMm')} label="Hauteur Coffre" value={p.coffreADeduireMm} onChange={v=>update('coffreADeduireMm',v)}/><div className="text-right text-sm font-bold text-blue-600">Passage: {p.hauteurMm && p.coffreADeduireMm ? p.hauteurMm - p.coffreADeduireMm : '-'} mm</div></div>}
               </div>
             </Card>}
 
-            {ValidationService.hasAdvancedOptions(p.type)&&<div className="border dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 overflow-hidden"><button onClick={()=>setAdv(!adv)} className="w-full flex justify-between p-3 bg-slate-50 dark:bg-slate-700 font-medium dark:text-white"><span>Options Avancées</span>{adv?<ChevronUp size={18}/>:<ChevronDown size={18}/>}</button>{adv&&<div className="p-4 space-y-3">
+            {ValidationService.hasAdvancedOptions(p.type)&&<div className="border border-slate-200 rounded-lg bg-white overflow-hidden"><button onClick={()=>setAdv(!adv)} className="w-full flex justify-between p-3 bg-slate-50 font-medium"><span>Options Avancées</span>{adv?<ChevronUp size={18}/>:<ChevronDown size={18}/>}</button>{adv&&<div className="p-4 space-y-3">
                 {(p.type.includes('PORTE')||p.type==='FENETRE')&&<><BooleanToggle label="Ouv. Extérieure" value={p.ouvertureExterieure} onChange={v=>update('ouvertureExterieure',v)}/><BooleanToggle label="Serrure Clé" value={p.serrureCle} onChange={v=>update('serrureCle',v)}/></>}
                 {p.type==='VOLET_ROULANT'&&<><ToggleGroup label="Couple" options={[{label:'10Nm',value:10},{label:'20Nm',value:20}]} value={p.coupleMoteur||10} onChange={v=>update('coupleMoteur',v)}/><ToggleGroup label="Pose" options={[{label:'Réno',value:'RENO'},{label:'Tradi',value:'TRADI'},{label:'Tunnel',value:'TUNNEL'}]} value={p.pose} onChange={v=>update('pose',v)}/></>}
             </div>}</div>}
@@ -319,15 +365,15 @@
               <DrawingCanvas data={p.dessin} onChange={d=>update('dessin',d)}/>
               
               <div className="mt-4">
-                <label className="text-sm font-medium dark:text-slate-300 mb-2 block">Photos</label>
+                <label className="text-sm font-medium mb-2 block">Photos</label>
                 <div className="photo-grid">
                   {(p.photos||[]).map((src,i)=><div key={i} className="photo-thumb"><img src={src} className="w-full h-full object-cover"/><button className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-bl" onClick={()=>setP(pr=>({...pr,photos:pr.photos.filter((_,ix)=>ix!==i)}))}><X size={12}/></button></div>)}
-                  <button onClick={()=>fileRef.current.click()} className="h-20 border-2 border-dashed border-blue-300 rounded flex flex-col items-center justify-center text-blue-500 hover:bg-blue-50 dark:hover:bg-slate-700"><Camera size={24}/><span className="text-xs">Ajouter</span></button>
+                  <button onClick={()=>fileRef.current.click()} className="h-20 border-2 border-dashed border-blue-300 rounded flex flex-col items-center justify-center text-blue-500 hover:bg-blue-50"><Camera size={24}/><span className="text-xs">Ajouter</span></button>
                 </div>
                 <input type="file" ref={fileRef} accept="image/*" capture="environment" className="hidden" onChange={handlePhoto}/>
               </div>
 
-              <textarea className="w-full p-2 border rounded mt-2 h-20 dark:bg-slate-900 dark:text-white dark:border-slate-600" placeholder="Notes (pose, accès...)" value={p.notes||''} onChange={e=>update('notes',e.target.value)}/>
+              <textarea className="w-full p-2 border rounded mt-2 h-20" placeholder="Notes (pose, accès...)" value={p.notes||''} onChange={e=>update('notes',e.target.value)}/>
             </Card>
           </div>
         </div>
