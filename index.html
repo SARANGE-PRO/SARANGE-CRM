@@ -84,7 +84,7 @@
       });
     };
 
-    // --- DATABASE ENGINE (IndexedDB) ---
+    // --- DATABASE ENGINE ---
     const DB_NAME = 'SarangeDB_V2';
     const DB_VERSION = 1;
     const hasIDB = (typeof window !== 'undefined') && ('indexedDB' in window);
@@ -301,6 +301,7 @@
     const Button = ({ onClick, variant = 'primary', children, icon: Icon, disabled = false, className = '', type="button" }) => {
       const vars = {
         primary: "bg-brand-600 text-white hover:bg-brand-700 disabled:bg-brand-300 shadow-md shadow-brand-500/20",
+        whatsapp: "bg-green-600 text-white hover:bg-green-700 shadow-md",
         secondary: "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700",
         danger: "bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 dark:bg-red-900/20 dark:border-red-900/30",
         ghost: "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -313,10 +314,18 @@
       );
     };
 
-    const Input = ({ label, value, onChange, placeholder, type="text", error }) => (
+    const Input = ({ label, value, onChange, placeholder, type="text", error, inputMode, pattern }) => (
       <div className="mb-4">
         {label && <label className="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">{label}</label>}
-        <input type={type} value={value||''} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`w-full p-3 rounded-lg bg-white dark:bg-slate-900 border ${error ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500'} outline-none transition-all dark:text-white`}/>
+        <input 
+          type={type} 
+          value={value||''} 
+          onChange={e => onChange(e.target.value)} 
+          placeholder={placeholder} 
+          inputMode={inputMode}
+          pattern={pattern}
+          className={`w-full p-3 rounded-lg bg-white dark:bg-slate-900 border ${error ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500'} outline-none transition-all dark:text-white`}
+        />
         {error && <span className="text-xs text-red-500 mt-1">{error}</span>}
       </div>
     );
@@ -368,20 +377,26 @@
       );
     };
 
+    // --- RESTORED ORIGINAL DRAWING LOGIC (No Grid, Original Event Handling) ---
     const DrawingCanvas = ({ data, onChange }) => {
       const ref = useRef(null); 
       const [lines, setLines] = useState(data?.lines || []); 
       const [isDrawing, setIsDrawing] = useState(false);
+
       useEffect(() => { 
         const ctx = ref.current?.getContext('2d'); if(!ctx)return; 
-        ctx.clearRect(0,0,350,250); ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth=3; ctx.strokeStyle='#2563EB'; 
-        ctx.save(); ctx.strokeStyle='#e2e8f0'; ctx.lineWidth=1; ctx.beginPath();
-        for(let x=0;x<=350;x+=25){ctx.moveTo(x,0);ctx.lineTo(x,250);} for(let y=0;y<=250;y+=25){ctx.moveTo(0,y);ctx.lineTo(350,y);}
-        ctx.stroke(); ctx.restore();
+        ctx.clearRect(0,0,350,250); 
+        ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth=3; ctx.strokeStyle='#2563EB'; 
+        // No Grid as per user request
         lines.forEach(l=>{ if(l.length<1)return; ctx.beginPath(); ctx.moveTo(l[0].x, l[0].y); for(let i=1;i<l.length;i++)ctx.lineTo(l[i].x,l[i].y); ctx.stroke(); }); 
         onChange({lines,width:350,height:250}); 
       }, [lines]);
-      const getPos = e => { const r = ref.current.getBoundingClientRect(); const t = e.touches ? e.touches[0] : e; return { x: t.clientX - r.left, y: t.clientY - r.top }; };
+
+      const getPos = e => { 
+        const r = ref.current.getBoundingClientRect(); 
+        const t = e.touches ? e.touches[0] : e; 
+        return { x: t.clientX - r.left, y: t.clientY - r.top }; 
+      };
       const start = e => { if(e.cancelable) e.preventDefault(); setIsDrawing(true); setLines(p => [...p, [getPos(e)]]); };
       const move = e => { if(!isDrawing) return; if(e.cancelable) e.preventDefault(); const p = getPos(e); setLines(prev => { const n = [...prev]; n[n.length - 1] = [...n[n.length - 1], p]; return n; }); };
 
@@ -498,7 +513,7 @@
             <h2 className="text-xl font-bold mb-6 dark:text-white">Nouveau Dossier</h2>
             <Input label="Nom Client" value={f.client} onChange={v => setF({...f, client: v})} placeholder="Ex: M. Dupont" />
             <AddressInput value={f.adresse} onChange={v => setF({...f, adresse: v})} />
-            <div className="grid grid-cols-2 gap-4"><Input label="Téléphone" value={f.telephone} onChange={v => setF({...f, telephone: v})} type="tel" /><Input label="Email" value={f.email} onChange={v => setF({...f, email: v})} type="email" /></div>
+            <div className="grid grid-cols-2 gap-4"><Input label="Téléphone" value={f.telephone} onChange={v => setF({...f, telephone: v})} type="tel" inputMode="tel" pattern="[0-9]*" /><Input label="Email" value={f.email} onChange={v => setF({...f, email: v})} type="email" inputMode="email" /></div>
             <SelectToggle label="Type de contrat" value={f.typeContrat} onChange={v => setF({...f, typeContrat: v})} options={[{label: 'Fourniture Seule', value: 'FOURNITURE_SEULE'}, {label: 'Fourniture & Pose', value: 'FOURNITURE_ET_POSE'}]} />
             <div className="flex gap-3 mt-6"><Button variant="secondary" onClick={onClose} className="flex-1">Annuler</Button><Button onClick={submit} className="flex-1">Créer le dossier</Button></div>
           </div>
@@ -596,7 +611,7 @@
                 {/* Description pour AUTRE */}
                 {p.type==='AUTRE' && <div className={isErr('description')?'has-error':''}><Input label="Description" value={p.description} onChange={v => update('description', v)} error={isErr('description') && 'Requis'}/></div>}
 
-                <div className="grid grid-cols-2 gap-4"><div className={isErr('largeurMm') ? 'has-error' : ''}><Input label="Largeur (mm)" type="number" value={p.largeurMm} onChange={v => update('largeurMm', parseInt(v))} error={isErr('largeurMm') && 'Requis'} /></div><div className={isErr('hauteurMm') ? 'has-error' : ''}><Input label="Hauteur (mm)" type="number" value={p.hauteurMm} onChange={v => update('hauteurMm', parseInt(v))} error={isErr('hauteurMm') && 'Requis'} /></div></div>
+                <div className="grid grid-cols-2 gap-4"><div className={isErr('largeurMm') ? 'has-error' : ''}><Input label="Largeur (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.largeurMm} onChange={v => update('largeurMm', parseInt(v))} error={isErr('largeurMm') && 'Requis'} /></div><div className={isErr('hauteurMm') ? 'has-error' : ''}><Input label="Hauteur (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.hauteurMm} onChange={v => update('hauteurMm', parseInt(v))} error={isErr('hauteurMm') && 'Requis'} /></div></div>
                 {ValidationService.isMeasureSuspicious(p.largeurMm, p.monobloc) || ValidationService.isMeasureSuspicious(p.hauteurMm, p.monobloc) ? (<div className="text-orange-500 text-xs flex items-center mt-[-10px] mb-4"><AlertTriangle size={12} className="mr-1"/> Attention: Cotes très petites (&lt;150mm)</div>) : null}
               </div>
 
@@ -604,8 +619,8 @@
                 <div className="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
                   <h3 className="text-xs font-bold text-slate-400 uppercase mb-4 tracking-wider">Caractéristiques</h3>
                   <div className={isErr('matiere') ? 'has-error' : ''}><SelectToggle label="Matière" value={p.matiere} onChange={v => update('matiere', v)} options={[{label:'PVC', value:'PVC'}, {label:'Alu', value:'ALU'}]} /><FieldErr field="matiere"/></div>
-                  {p.matiere && (<div className={`mt-4 ${isErr('profil') ? 'has-error' : ''}`}><SelectToggle label="Type de Pose (Profil)" value={p.profil} onChange={v => update('profil', v)} options={p.matiere === 'PVC' ? [{label:'Neuf', value:'NEUF'}, {label:'Rénov 40', value:'RENO_40'}, {label:'Rénov 60', value:'RENO_60'}, {label:'Tunnel (ISO)', value:'ISO'}] : [{label:'Neuf', value:'NEUF'}, {label:'Rénov', value:'RENO'}]} /><FieldErr field="profil"/></div>)}
-                  {p.profil === 'ISO' && <Input label="Aile ISO (mm)" type="number" value={p.isoMm} onChange={v => update('isoMm', parseInt(v))} error={isErr('isoMm') && 'Requis'} />}
+                  {p.matiere && (<div className={`mt-4 ${isErr('profil') ? 'has-error' : ''}`}><SelectToggle label="Type de Pose (Profil)" value={p.profil} onChange={v => update('profil', v)} options={p.matiere === 'PVC' ? [{label:'Neuf', value:'NEUF'}, {label:'Rénov 40', value:'RENO_40'}, {label:'Rénov 60', value:'RENO_60'}, {label:'ISO', value:'ISO'}] : [{label:'Neuf', value:'NEUF'}, {label:'Rénov', value:'RENO'}]} /><FieldErr field="profil"/></div>)}
+                  {p.profil === 'ISO' && <Input label="Aile ISO (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.isoMm} onChange={v => update('isoMm', parseInt(v))} error={isErr('isoMm') && 'Requis'} />}
                   <div className={`mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 ${isErr('couleur') ? 'has-error' : ''}`}><SelectToggle label="Couleur" value={p.couleur} onChange={v => update('couleur', v)} options={p.matiere==='PVC' ? [{label:'Blanc',value:'BLANC'},{label:'Bicolor 7016',value:'BICOLOR_7016'},{label:'Autre',value:'AUTRE'}] : [{label:'Blanc',value:'BLANC'},{label:'Gris 7016',value:'GRIS_7016'},{label:'Autre',value:'AUTRE'}]} />{p.couleur === 'AUTRE' && <Input placeholder="Préciser couleur (ex: chêne doré)" value={p.couleurAutre} onChange={v => update('couleurAutre', v)} error={isErr('couleurAutre') && 'Requis'} />}</div>
                 </div>
               )}
@@ -628,7 +643,7 @@
                   {/* FEATURE: BOX DOMOTIQUE */}
                   {p.manoeuvre !== 'FILAIRE' && <label className="flex items-center p-3 border rounded-lg bg-slate-50 dark:bg-slate-800 dark:border-slate-700 mt-4 mb-4"><input type="checkbox" className="w-5 h-5 accent-brand-600" checked={!!p.boxDomotique} onChange={e=>update('boxDomotique',e.target.checked)}/><span className="ml-3 font-medium dark:text-white">Box Domotique</span></label>}
 
-                  <div className="my-4"><label className="flex items-center justify-between p-3 border rounded-lg bg-slate-50 dark:bg-slate-800 dark:border-slate-700"><span className="font-medium dark:text-white">Volet Monobloc ?</span><input type="checkbox" className="w-6 h-6 accent-brand-600" checked={!!p.monobloc} onChange={e => update('monobloc', e.target.checked)} /></label>{p.monobloc && (<div className="mt-3 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg"><Input label="Hauteur Coffre à déduire" type="number" value={p.coffreADeduireMm} onChange={v => update('coffreADeduireMm', parseInt(v))} /><div className="text-right text-sm font-bold text-brand-600">Hauteur Passage: {p.hauteurMm && p.coffreADeduireMm ? p.hauteurMm - p.coffreADeduireMm : '-'} mm</div></div>)}</div>
+                  <div className="my-4"><label className="flex items-center justify-between p-3 border rounded-lg bg-slate-50 dark:bg-slate-800 dark:border-slate-700"><span className="font-medium dark:text-white">Volet Monobloc ?</span><input type="checkbox" className="w-6 h-6 accent-brand-600" checked={!!p.monobloc} onChange={e => update('monobloc', e.target.checked)} /></label>{p.monobloc && (<div className="mt-3 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg"><Input label="Hauteur Coffre à déduire" type="number" inputMode="numeric" pattern="[0-9]*" value={p.coffreADeduireMm} onChange={v => update('coffreADeduireMm', parseInt(v))} /><div className="text-right text-sm font-bold text-brand-600">Hauteur Passage: {p.hauteurMm && p.coffreADeduireMm ? p.hauteurMm - p.coffreADeduireMm : '-'} mm</div></div>)}</div>
                 </div>
               )}
 
@@ -652,7 +667,7 @@
                                   <label className="flex items-center"><input type="radio" className="accent-brand-600" checked={p.poigneeHauteur!=='AUTRE'} onChange={()=>update('poigneeHauteur','CENTREE')}/> <span className="ml-2 dark:text-white">Centrée</span></label>
                                   <label className="flex items-center"><input type="radio" className="accent-brand-600" checked={p.poigneeHauteur==='AUTRE'} onChange={()=>update('poigneeHauteur','AUTRE')}/> <span className="ml-2 dark:text-white">Autre</span></label>
                                 </div>
-                                {p.poigneeHauteur==='AUTRE'&&<input type="number" className="mt-2 w-32 p-2 border rounded dark:bg-slate-800 dark:text-white dark:border-slate-600" placeholder="mm" value={p.poigneeHauteurMm||''} onChange={e=>update('poigneeHauteurMm',parseInt(e.target.value))}/>}
+                                {p.poigneeHauteur==='AUTRE'&&<input type="number" inputMode="numeric" pattern="[0-9]*" className="mt-2 w-32 p-2 border rounded dark:bg-slate-800 dark:text-white dark:border-slate-600" placeholder="mm" value={p.poigneeHauteurMm||''} onChange={e=>update('poigneeHauteurMm',parseInt(e.target.value))}/>}
                               </div>
                             </>
                           )}
@@ -671,7 +686,7 @@
                   {p.largeurMm>1000 && (
                     <div className="mt-3 pt-3 border-t dark:border-slate-700">
                       <label className="flex items-center justify-between mb-3"><span className="dark:text-white font-medium">Tierce ?</span> <input type="checkbox" className="w-6 h-6 accent-brand-600" checked={!!p.tierce} onChange={e=>update('tierce',e.target.checked)}/></label>
-                      {p.tierce&&<Input label="Cote Passage (mm)" type="number" value={p.cotePassageMm} onChange={v=>update('cotePassageMm',v)}/>}
+                      {p.tierce&&<Input label="Cote Passage (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.cotePassageMm} onChange={v=>update('cotePassageMm',v)}/>}
                     </div>
                   )}
                 </div>
@@ -690,22 +705,47 @@
 
     const FinalizeModal = ({ chantier, products, onClose, onUpdate }) => {
       const incomplete = products.filter(p => !p.isValid);
-      const generate = () => {
+      
+      const prepareFile = () => {
          const date = new Date().toISOString();
          onUpdate({ dateFinalisation: date });
          const html = generateReportHTML(chantier, products, date);
-         const blob = new Blob([html], { type: 'text/html' });
-         const url = URL.createObjectURL(blob);
-         const win = window.open(url, '_blank');
-         if(!win) alert("Pop-up bloqué. Autorisez les pop-ups pour imprimer.");
+         return new File([html], `Releve_${chantier.client.replace(/\s+/g,'_')}.html`, { type: 'text/html' });
       };
+
+      const share = async () => {
+         const file = prepareFile();
+         if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+               await navigator.share({
+                  files: [file],
+                  title: `Relevé ${chantier.client}`,
+                  text: `Voici le relevé pour ${chantier.client}`
+               });
+            } catch (err) { console.log(err); }
+         } else {
+            alert("Le partage de fichiers n'est pas supporté. Utilisez l'option Imprimer.");
+         }
+      };
+
+      const print = () => {
+         const file = prepareFile();
+         const url = URL.createObjectURL(file);
+         const win = window.open(url, '_blank');
+         if(!win) alert("Pop-up bloqué.");
+      };
+
       return (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
           <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl text-center">
              <div className="mb-4 flex justify-center"><div className={`p-4 rounded-full ${incomplete.length ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>{incomplete.length ? <AlertTriangle size={32}/> : <CheckCircle size={32}/>}</div></div>
              <h3 className="text-xl font-bold mb-2 dark:text-white">Finaliser le dossier</h3>
-             {incomplete.length > 0 ? (<p className="text-orange-600 mb-6 bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg text-sm">Il reste <strong>{incomplete.length} produits incomplets</strong>. Vous devriez les vérifier avant d'exporter.</p>) : (<p className="text-slate-500 mb-6 text-sm">Le dossier est complet. Vous pouvez générer le rapport.</p>)}
-             <div className="space-y-3"><Button onClick={generate} variant={incomplete.length ? "secondary" : "primary"} className="w-full">Générer PDF / Imprimer</Button><Button onClick={onClose} variant="ghost" className="w-full">Retour</Button></div>
+             {incomplete.length > 0 ? (<p className="text-orange-600 mb-6 bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg text-sm">Il reste <strong>{incomplete.length} produits incomplets</strong>. Vous devriez les vérifier avant d'exporter.</p>) : (<p className="text-slate-500 mb-6 text-sm">Le dossier est complet.</p>)}
+             <div className="space-y-3">
+               <Button onClick={share} variant="whatsapp" className="w-full" icon={Share}>Partager (WhatsApp/Mail)</Button>
+               <Button onClick={print} variant="secondary" className="w-full" icon={Printer}>Imprimer / Sauvegarder PDF</Button>
+               <Button onClick={onClose} variant="ghost" className="w-full">Retour</Button>
+             </div>
           </div>
         </div>
       );
