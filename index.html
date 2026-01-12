@@ -14,10 +14,9 @@
   
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-
   <style>
     body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }
+    /* Evite le zoom sur input mobile */
     input, textarea, select { font-size: 16px; } 
     .no-select { user-select: none; -webkit-user-select: none; }
   </style>
@@ -33,12 +32,12 @@
 
   <script type="text/babel" data-type="module">
     
-    // --- 0. IMPORTS ---
+    // --- 0. IMPORTS MODERNES (ESM) ---
     import React, { useState, useEffect, useRef, useMemo, createContext, useContext } from 'https://esm.sh/react@18.2.0';
     import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
     import { 
       Plus, Trash2, Save, ArrowLeft, FileText, Check, AlertTriangle, 
-      PenTool, X, ChevronDown, ChevronUp, Share, Printer, CheckCircle, Download, Eye, Clock, MessageCircle
+      PenTool, X, ChevronDown, ChevronUp, Share, Printer, CheckCircle, Download, Eye, Clock
     } from 'https://esm.sh/lucide-react@0.263.1';
 
     // --- 1. LOGIQUE METIER ---
@@ -46,12 +45,15 @@
       isHeightValidForOB: (heightMm) => !heightMm || heightMm <= 2000,
       isMeasureSuspicious: (val) => val !== undefined && val > 0 && val < 100,
       hasAdvancedOptions: (type) => ['FENETRE', 'VOLET_ROULANT', 'PORTE_ENTREE'].includes(type),
+
       validateProduct: (p) => {
         const errors = [];
         if (p.type !== 'AUTRE') {
           if (!p.largeurMm) errors.push("Largeur manquante");
           if (!p.hauteurMm) errors.push("Hauteur manquante");
-        } else { if (!p.description) errors.push("Description obligatoire"); }
+        } else {
+          if (!p.description) errors.push("Description obligatoire");
+        }
 
         if (['FENETRE', 'BAIE_COULISSANTE', 'PORTE_ENTREE', 'PORTE_SERVICE'].includes(p.type)) {
           if (!p.matiere) errors.push("Matière requise");
@@ -59,39 +61,49 @@
           if (!p.couleur) errors.push("Couleur requise");
           if (p.couleur === 'AUTRE' && !p.couleurAutre) errors.push("Préciser la couleur");
           if (p.profil === 'ISO' && !p.isoMm) errors.push("Dimension ISO requise");
+          
           if (p.type === 'PORTE_ENTREE') {
             if (!p.remplissage) errors.push("Remplissage requis");
             if (p.tierce && !p.cotePassageMm) errors.push("Cote de passage requise (Tierce)");
           }
         }
+
         if (p.type === 'VOLET_ROULANT') {
           if (!p.manoeuvre) errors.push("Manoeuvre requise");
-          if ((p.manoeuvre === 'FILAIRE' || p.manoeuvre === 'RADIO') && !p.sortieCable) errors.push("Sortie câble requise");
+          if ((p.manoeuvre === 'FILAIRE' || p.manoeuvre === 'RADIO') && !p.sortieCable) {
+            errors.push("Sortie de câble requise");
+          }
         }
+
         return { isValid: errors.length === 0, errors };
       }
     };
 
     const generateUUID = () => Math.random().toString(36).substring(2) + Date.now().toString(36);
 
-    // --- 2. STATE ---
+    // --- 2. STATE MANAGEMENT ---
     const AppContext = createContext(null);
+
     const useAppStore = () => {
       const context = useContext(AppContext);
       if (!context) throw new Error("Erreur AppContext");
       return context;
     };
 
-    // --- 3. UI COMPONENTS ---
-    const Card = ({ children, className = "" }) => <div className={`bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden ${className}`}>{children}</div>;
+    // --- 3. COMPOSANTS UI ---
     
+    const Card = ({ children, className = "" }) => (
+      <div className={`bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden ${className}`}>
+        {children}
+      </div>
+    );
+
     const Button = ({ onClick, variant = 'primary', children, icon: Icon, disabled = false, className = '' }) => {
       const base = "flex items-center justify-center px-4 py-3 rounded-lg font-medium transition-all active:scale-95 touch-manipulation";
       const variants = {
         primary: "bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300",
         secondary: "bg-slate-100 text-slate-700 hover:bg-slate-200",
         danger: "bg-red-50 text-red-600 hover:bg-red-100",
-        whatsapp: "bg-green-500 text-white hover:bg-green-600 disabled:bg-green-300"
       };
       return (
         <button onClick={onClick} disabled={disabled} className={`${base} ${variants[variant]} ${className}`}>
@@ -101,7 +113,9 @@
       );
     };
 
-    const SectionTitle = ({ title }) => <h3 className="text-sm uppercase tracking-wider text-slate-500 font-bold mb-3 mt-6 border-b pb-1">{title}</h3>;
+    const SectionTitle = ({ title }) => (
+      <h3 className="text-sm uppercase tracking-wider text-slate-500 font-bold mb-3 mt-6 border-b pb-1">{title}</h3>
+    );
 
     const NumericInput = ({ label, value, onChange, suffix = "mm" }) => {
       const isSuspicious = ValidationService.isMeasureSuspicious(value);
@@ -109,10 +123,23 @@
         <div className="flex flex-col mb-4">
           <label className="text-sm font-medium text-slate-700 mb-1">{label}</label>
           <div className="relative">
-            <input type="number" inputMode="numeric" pattern="[0-9]*" value={value || ''} onChange={(e) => onChange(e.target.value ? parseInt(e.target.value) : undefined)} className={`w-full p-3 text-lg border-2 rounded-lg outline-none ${isSuspicious ? 'border-amber-300 bg-amber-50' : 'border-slate-200 focus:border-blue-500'}`} placeholder="0" />
+            <input
+              type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={value || ''}
+              onChange={(e) => onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+              className={`w-full p-3 text-lg border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-colors ${isSuspicious ? 'border-amber-300 bg-amber-50' : 'border-slate-200'}`}
+              placeholder="0"
+            />
             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">{suffix}</span>
           </div>
-          {isSuspicious && <div className="flex items-center text-amber-600 text-xs mt-1"><AlertTriangle size={12} className="mr-1" /> Attention : cote &lt; 100{suffix}</div>}
+          {isSuspicious && (
+            <div className="flex items-center text-amber-600 text-xs mt-1">
+              <AlertTriangle size={12} className="mr-1" />
+              Attention : cote &lt; 100{suffix}
+            </div>
+          )}
         </div>
       );
     };
@@ -121,17 +148,36 @@
       <div className="mb-4">
         <label className="text-sm font-medium text-slate-700 mb-2 block">{label}</label>
         <div className="flex flex-wrap gap-2">
-          {options.map((opt) => (
-            <button key={opt.value} onClick={() => onChange(opt.value)} className={`px-4 py-2 rounded-md font-medium text-sm border ${value === opt.value ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-600 border-slate-200'}`}>{opt.label}</button>
-          ))}
+          {options.map((opt) => {
+            const isSelected = value === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => onChange(opt.value)}
+                className={`px-4 py-2 rounded-md font-medium text-sm transition-all border ${
+                  isSelected 
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-md' 
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
         </div>
       </div>
     );
 
     const BooleanToggle = ({ label, value, onChange, note, disabled }) => (
       <div className={`flex items-center justify-between py-3 border-b border-slate-100 last:border-0 ${disabled ? 'opacity-50' : ''}`}>
-        <div><div className="font-medium text-slate-700">{label}</div>{note && <div className="text-xs text-slate-400">{note}</div>}</div>
-        <button onClick={() => !disabled && onChange(!value)} className={`relative w-14 h-8 rounded-full transition-colors ${value ? 'bg-green-500' : 'bg-slate-200'}`}>
+        <div>
+          <div className="font-medium text-slate-700">{label}</div>
+          {note && <div className="text-xs text-slate-400">{note}</div>}
+        </div>
+        <button
+          onClick={() => !disabled && onChange(!value)}
+          className={`relative w-14 h-8 rounded-full transition-colors ${value ? 'bg-green-500' : 'bg-slate-200'}`}
+        >
           <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${value ? 'translate-x-6' : 'translate-x-0'}`} />
         </button>
       </div>
@@ -140,16 +186,21 @@
     const DrawingCanvas = ({ data, onChange }) => {
       const canvasRef = useRef(null);
       const [lines, setLines] = useState(data?.lines || []);
-      
+      const [isDrawing, setIsDrawing] = useState(false);
+
       useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
+        if (!ctx) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
         lines.forEach(line => {
           if (line.length < 1) return;
-          ctx.beginPath(); ctx.lineWidth = 3; ctx.strokeStyle = '#2563EB';
+          ctx.beginPath();
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = '#2563EB';
           ctx.moveTo(line[0].x, line[0].y);
           for (let i = 1; i < line.length; i++) ctx.lineTo(line[i].x, line[i].y);
           ctx.stroke();
@@ -158,229 +209,331 @@
       }, [lines]);
 
       const getPos = (e) => {
-        const r = canvasRef.current.getBoundingClientRect();
-        const t = e.touches ? e.touches[0] : e;
-        return { x: t.clientX - r.left, y: t.clientY - r.top };
+        const canvas = canvasRef.current;
+        if (!canvas) return { x: 0, y: 0 };
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - rect.left, y: clientY - rect.top };
       };
-      
-      const start = (e) => { if (e.cancelable) e.preventDefault(); setLines(p => [...p, [getPos(e)]]); };
-      const move = (e) => { 
+
+      const start = (e) => { 
         if (e.cancelable) e.preventDefault(); 
-        if (e.buttons !== 1 && !e.touches) return;
-        setLines(p => { const n = [...p]; n[n.length - 1] = [...n[n.length - 1], getPos(e)]; return n; });
+        setIsDrawing(true); 
+        setLines(prev => [...prev, [getPos(e)]]); 
       };
+      const move = (e) => {
+        if (!isDrawing) return;
+        if (e.cancelable) e.preventDefault(); 
+        const pos = getPos(e);
+        setLines(prev => {
+          const newLines = [...prev];
+          newLines[newLines.length - 1] = [...newLines[newLines.length - 1], pos];
+          return newLines;
+        });
+      };
+      const end = () => setIsDrawing(false);
 
       return (
         <div className="bg-white border rounded-lg p-2">
           <div className="flex justify-between mb-2">
-            <div className="flex items-center text-sm text-slate-500"><PenTool size={16} className="mr-1"/> Dessin libre</div>
+            <div className="flex space-x-2 text-sm text-slate-500 items-center"><PenTool size={16} className="mr-1"/> Dessin libre</div>
             <div className="flex space-x-2">
               <button onClick={() => setLines(p => p.slice(0, -1))} className="text-sm px-3 py-1 bg-slate-100 rounded text-slate-700">Annuler</button>
-              <button onClick={() => confirm("Effacer ?") && setLines([])} className="text-sm px-3 py-1 bg-red-50 text-red-600 rounded">Effacer</button>
+              <button onClick={() => confirm("Effacer tout ?") && setLines([])} className="text-sm px-3 py-1 bg-red-50 text-red-600 rounded">Effacer</button>
             </div>
           </div>
-          <canvas ref={canvasRef} width={350} height={250} className="w-full h-64 bg-slate-50 border border-dashed border-slate-300 rounded touch-none cursor-crosshair" 
-            onMouseDown={start} onMouseMove={move} onTouchStart={start} onTouchMove={move} />
+          <canvas
+            ref={canvasRef} width={350} height={250}
+            className="w-full h-64 bg-slate-50 border border-dashed border-slate-300 rounded touch-none cursor-crosshair"
+            onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
+            onTouchStart={start} onTouchMove={move} onTouchEnd={end}
+          />
         </div>
       );
     };
 
-    // --- 4. EDITOR ---
-    const ProductEditor = ({ product: p, onSave, onCancel }) => {
-      const [localP, setP] = useState(p);
+    // --- 4. PRODUCT EDITOR ---
+    const ProductEditor = ({ product: initialProduct, onSave, onCancel }) => {
+      const [p, setP] = useState(initialProduct);
       const [showAdvanced, setShowAdvanced] = useState(false);
       const { state } = useAppStore();
-      
-      useEffect(() => {
-        if (localP.type === 'FENETRE' && localP.hauteurMm > 2000 && localP.oscilloBattant) setP(x => ({ ...x, oscilloBattant: false }));
-        if (localP.type === 'PORTE_ENTREE' && localP.largeurMm <= 1000 && localP.tierce) setP(x => ({ ...x, tierce: false, cotePassageMm: undefined }));
-      }, [localP.hauteurMm, localP.largeurMm, localP.type]);
+      const products = state.products;
 
-      const update = (k, v) => setP(x => ({ ...x, [k]: v }));
-      const updateNested = (parent, k, v) => setP(x => ({ ...x, [parent]: { ...(x[parent] || {}), [k]: v } }));
-      const validation = ValidationService.validateProduct(localP);
+      useEffect(() => {
+        if (p.type === 'FENETRE' && p.hauteurMm && p.hauteurMm > 2000 && p.oscilloBattant) {
+          setP(prev => ({ ...prev, oscilloBattant: false }));
+        }
+        if (p.type === 'PORTE_ENTREE' && p.largeurMm && p.largeurMm <= 1000 && p.tierce) {
+          setP(prev => ({ ...prev, tierce: false, cotePassageMm: undefined }));
+        }
+      }, [p.hauteurMm, p.largeurMm, p.type]);
+
+      const update = (field, val) => setP(prev => ({ ...prev, [field]: val }));
+      const updateNested = (parent, field, val) => setP(prev => ({ ...prev, [parent]: { ...(prev[parent] || {}), [field]: val } }));
+
+      const validation = ValidationService.validateProduct(p);
 
       const getColorOptions = () => {
-        if (localP.matiere === 'PVC') return [{label: 'Blanc', value: 'BLANC'}, {label: 'Bicolor', value: 'BICOLOR_7016'}, {label: 'Autre', value: 'AUTRE'}];
-        return [{label: 'Blanc', value: 'BLANC'}, {label: 'Gris 7016', value: 'GRIS_7016'}, {label: 'Autre', value: 'AUTRE'}];
+        if (p.matiere === 'PVC') return [{label: 'Blanc', value: 'BLANC'}, {label: 'Bicolor (Blanc/7016)', value: 'BICOLOR_7016'}, {label: 'Autre', value: 'AUTRE'}];
+        if (p.matiere === 'ALU') return [{label: 'Blanc', value: 'BLANC'}, {label: 'Gris 7016', value: 'GRIS_7016'}, {label: 'Autre', value: 'AUTRE'}];
+        return [];
       };
 
       return (
         <div className="flex flex-col h-full bg-slate-50 fixed inset-0 z-50">
           <div className="bg-white px-4 py-3 border-b flex justify-between items-center sticky top-0 z-10 shadow-sm">
-            <button onClick={onCancel} className="p-2 text-slate-500 bg-slate-100 rounded-full"><X size={24} /></button>
-            <h2 className="font-bold text-lg text-slate-800">{localP.id ? `Produit #${String(localP.index).padStart(2, '0')}` : 'Nouveau'}</h2>
-            <button onClick={() => onSave({...localP, isValid: validation.isValid, validationErrors: validation.errors})} className={`flex items-center px-4 py-2 rounded-full font-bold ${validation.isValid ? 'bg-blue-600 text-white' : 'bg-amber-100 text-amber-800'}`}>
-              <Save size={18} className="mr-2" /> {validation.isValid ? 'OK' : 'Incomplet'}
+            <button onClick={onCancel} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full"><X size={24} /></button>
+            <h2 className="font-bold text-lg text-slate-800">{p.id ? `Produit #${String(p.index).padStart(2, '0')}` : 'Nouveau'}</h2>
+            <button 
+              onClick={() => onSave({...p, isValid: validation.isValid, validationErrors: validation.errors})}
+              className={`flex items-center px-4 py-2 rounded-full font-medium ${validation.isValid ? 'bg-blue-600 text-white' : 'bg-amber-100 text-amber-800'}`}
+            >
+              <Save size={18} className="mr-2" />
+              {validation.isValid ? 'OK' : 'Incomplet'}
             </button>
           </div>
-          {!validation.isValid && <div className="bg-amber-50 px-4 py-2 border-b border-amber-100 text-xs text-amber-800">Manquant : {validation.errors.join(', ')}</div>}
-          
+
+          {!validation.isValid && (
+            <div className="bg-amber-50 px-4 py-2 border-b border-amber-100">
+              <p className="text-xs text-amber-800 font-medium">Manquant : {validation.errors.join(', ')}</p>
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-20">
             <Card className="p-4">
-              <label className="block text-sm font-medium mb-2">Type</label>
-              <div className="grid grid-cols-2 gap-2">
-                {[{l:'Fenêtre',v:'FENETRE'},{l:'Baie Coulis.',v:'BAIE_COULISSANTE'},{l:'Porte Entrée',v:'PORTE_ENTREE'},{l:'Porte Service',v:'PORTE_SERVICE'},{l:'Volet',v:'VOLET_ROULANT'},{l:'Autre',v:'AUTRE'}]
-                .map(t => <button key={t.v} onClick={()=>update('type',t.v)} className={`p-3 text-sm rounded border ${localP.type===t.v ? 'bg-slate-800 text-white' : 'bg-white'}`}>{t.l}</button>)}
+              <label className="block text-sm font-medium text-slate-700 mb-2">Type</label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {[
+                  { label: 'Fenêtre', value: 'FENETRE' }, { label: 'Baie Coulis.', value: 'BAIE_COULISSANTE' },
+                  { label: 'Porte Entrée', value: 'PORTE_ENTREE' }, { label: 'Porte Service', value: 'PORTE_SERVICE' },
+                  { label: 'Volet Roulant', value: 'VOLET_ROULANT' }, { label: 'Autre', value: 'AUTRE' }
+                ].map(t => (
+                  <button key={t.value} onClick={() => update('type', t.value)}
+                    className={`p-3 text-sm font-medium rounded-lg border transition-all ${p.type === t.value ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200'}`}>
+                    {t.label}
+                  </button>
+                ))}
               </div>
             </Card>
 
             <Card className="p-4">
-              {localP.type === 'AUTRE' && <div className="mb-4"><label className="text-sm font-medium">Description *</label><textarea value={localP.description||''} onChange={e=>update('description',e.target.value)} className="w-full p-3 border rounded-lg" /></div>}
+              {p.type === 'AUTRE' && (
+                <div className="mb-4">
+                  <label className="text-sm font-medium text-slate-700 mb-1">Description *</label>
+                  <textarea value={p.description || ''} onChange={e => update('description', e.target.value)} className="w-full p-3 border-2 border-slate-200 rounded-lg" rows={3} placeholder="Description..."/>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
-                <NumericInput label="Largeur (mm)" value={localP.largeurMm} onChange={v => update('largeurMm', v)} />
-                <NumericInput label="Hauteur (mm)" value={localP.hauteurMm} onChange={v => update('hauteurMm', v)} />
+                <NumericInput label="Largeur (mm)" value={p.largeurMm} onChange={(v) => update('largeurMm', v)} />
+                <NumericInput label="Hauteur (mm)" value={p.hauteurMm} onChange={(v) => update('hauteurMm', v)} />
               </div>
             </Card>
 
-            {['FENETRE', 'BAIE_COULISSANTE', 'PORTE_ENTREE', 'PORTE_SERVICE'].includes(localP.type) && (
+            {['FENETRE', 'BAIE_COULISSANTE', 'PORTE_ENTREE', 'PORTE_SERVICE'].includes(p.type) && (
               <Card className="p-4">
                 <SectionTitle title="Matière & Couleur" />
-                <ToggleGroup label="Matière" options={[{label:'PVC',value:'PVC'},{label:'Alu',value:'ALU'}]} value={localP.matiere} onChange={v=>update('matiere',v)} />
-                {localP.matiere === 'PVC' && <ToggleGroup label="Profil" options={[{label:'Neuf',value:'NEUF'},{label:'Rénov 40',value:'RENO_40'},{label:'Rénov 60',value:'RENO_60'},{label:'ISO',value:'ISO'}]} value={localP.profil} onChange={v=>update('profil',v)} />}
-                {localP.matiere === 'ALU' && <ToggleGroup label="Profil" options={[{label:'Neuf',value:'NEUF'},{label:'Rénov',value:'RENO'}]} value={localP.profil} onChange={v=>update('profil',v)} />}
-                {localP.profil === 'ISO' && <NumericInput label="Aile (mm)" value={localP.isoMm} onChange={v=>update('isoMm',v)} />}
-                <div className="mt-4 pt-4 border-t">
-                  <ToggleGroup label="Couleur" options={getColorOptions()} value={localP.couleur} onChange={v=>update('couleur',v)} />
-                  {localP.couleur === 'AUTRE' && <input placeholder="Préciser..." className="w-full p-2 border rounded" value={localP.couleurAutre||''} onChange={e=>update('couleurAutre',e.target.value)} />}
+                <ToggleGroup label="Matière" options={[{label: 'PVC', value: 'PVC'}, {label: 'Alu', value: 'ALU'}]} value={p.matiere} onChange={(v) => update('matiere', v)} />
+                {p.matiere === 'PVC' && <ToggleGroup label="Profil PVC" options={[{label: 'Neuf', value: 'NEUF'}, {label: 'Rénov 40', value: 'RENO_40'}, {label: 'Rénov 60', value: 'RENO_60'}, {label: 'ISO', value: 'ISO'}]} value={p.profil} onChange={(v) => update('profil', v)} />}
+                {p.matiere === 'ALU' && <ToggleGroup label="Profil Alu" options={[{label: 'Neuf', value: 'NEUF'}, {label: 'Rénov', value: 'RENO'}]} value={p.profil} onChange={(v) => update('profil', v)} />}
+                {p.profil === 'ISO' && <NumericInput label="Dimension Aile (mm)" value={p.isoMm} onChange={(v)=>update('isoMm',v)} />}
+                <div className="my-4 border-t pt-4">
+                  <ToggleGroup label="Couleur" options={getColorOptions()} value={p.couleur} onChange={(v) => update('couleur', v)} />
+                  {p.couleur === 'AUTRE' && <input type="text" placeholder="Préciser..." className="w-full p-2 border rounded" value={p.couleurAutre || ''} onChange={e => update('couleurAutre', e.target.value)}/>}
                 </div>
               </Card>
             )}
 
-            {(localP.type === 'FENETRE' || localP.type === 'BAIE_COULISSANTE') && (
+            {(p.type === 'FENETRE' || p.type === 'BAIE_COULISSANTE') && (
               <Card className="p-4">
                 <SectionTitle title="Vitrage & Options" />
                 <div className="grid grid-cols-2 gap-2 mb-4">
                   {['STANDARD_4_20_4', 'G200', 'FEUILLETE_1F', 'FEUILLETE_2F'].map(k => (
-                    <label key={k} className="flex items-center space-x-2 p-2 border rounded"><input type="checkbox" className="w-5 h-5" checked={localP.vitrageFlags?.[k==='STANDARD_4_20_4'?'standard':k.toLowerCase().replace(/_/g,'')]||false} onChange={e=>updateNested('vitrageFlags',k==='STANDARD_4_20_4'?'standard':k.toLowerCase().replace(/_/g,''),e.target.checked)} /><span className="text-xs">{k.replace(/_/g,' ')}</span></label>
+                    <label key={k} className="flex items-center space-x-2 p-2 border rounded cursor-pointer hover:bg-slate-50">
+                      <input type="checkbox" className="w-5 h-5 text-blue-600 rounded" checked={p.vitrageFlags?.[k === 'STANDARD_4_20_4' ? 'standard' : k.toLowerCase().replace(/_/g,'')] || false} onChange={(e) => updateNested('vitrageFlags', k === 'STANDARD_4_20_4' ? 'standard' : k.toLowerCase().replace(/_/g,''), e.target.checked)} />
+                      <span className="text-sm capitalize">{k.replace(/_/g, ' ')}</span>
+                    </label>
                   ))}
                 </div>
-                {localP.type === 'FENETRE' && (
+                {p.type === 'FENETRE' && (
                   <>
-                    <BooleanToggle label="Oscillo-Battant" value={localP.oscilloBattant} onChange={v=>update('oscilloBattant',v)} disabled={localP.hauteurMm>2000} />
-                    <BooleanToggle label="Grille Ventil" value={localP.grilleVentilation} onChange={v=>update('grilleVentilation',v)} />
-                    <div className="mt-4"><label className="text-sm font-medium">Poignée</label><div className="flex gap-4 mt-2"><label><input type="radio" checked={localP.poigneeHauteur!=='AUTRE'} onChange={()=>update('poigneeHauteur','CENTREE')}/> Centrée</label><label><input type="radio" checked={localP.poigneeHauteur==='AUTRE'} onChange={()=>update('poigneeHauteur','AUTRE')}/> Autre</label></div>
-                    {localP.poigneeHauteur==='AUTRE' && <input type="number" className="mt-2 w-24 p-2 border rounded" placeholder="mm" value={localP.poigneeHauteurMm||''} onChange={e=>update('poigneeHauteurMm',parseInt(e.target.value))} />}</div>
+                    <BooleanToggle label="Oscillo-Battant" value={p.oscilloBattant} onChange={(v) => update('oscilloBattant', v)} note={p.hauteurMm && p.hauteurMm > 2000 ? "Indisponible (>2000mm)" : undefined} disabled={p.hauteurMm ? p.hauteurMm > 2000 : false} />
+                    <BooleanToggle label="Grille Ventilation" value={p.grilleVentilation} onChange={(v) => update('grilleVentilation', v)} />
+                    <div className="mt-4">
+                      <label className="text-sm font-medium text-slate-700">Hauteur Poignée</label>
+                      <div className="flex items-center mt-2 space-x-4">
+                        <label className="flex items-center space-x-2"><input type="radio" checked={p.poigneeHauteur !== 'AUTRE'} onChange={() => update('poigneeHauteur', 'CENTREE')} /><span>Centrée</span></label>
+                        <label className="flex items-center space-x-2"><input type="radio" checked={p.poigneeHauteur === 'AUTRE'} onChange={() => update('poigneeHauteur', 'AUTRE')} /><span>Autre</span></label>
+                      </div>
+                      {p.poigneeHauteur === 'AUTRE' && <input type="number" className="mt-2 w-32 p-2 border rounded" placeholder="mm" value={p.poigneeHauteurMm || ''} onChange={e => update('poigneeHauteurMm', parseInt(e.target.value))}/>}
+                    </div>
                   </>
                 )}
               </Card>
             )}
 
-            {localP.type === 'PORTE_ENTREE' && (
+            {p.type === 'PORTE_ENTREE' && (
               <Card className="p-4">
-                <SectionTitle title="Porte Entrée" />
-                <ToggleGroup label="Remplissage" options={[{label:'Panneau Alu',value:'PANNEAU_DECORATIF_ALU'},{label:'Sandwich',value:'PANNEAU_SANDWICH'},{label:'Vitrée',value:'VITREE'}]} value={localP.remplissage} onChange={v=>update('remplissage',v)} />
-                {localP.largeurMm > 1000 && <div className="mt-4 bg-blue-50 p-2 rounded"><BooleanToggle label="Tierce Vitrée ?" value={localP.tierce} onChange={v=>update('tierce',v)} />{localP.tierce && <NumericInput label="Passage (mm)" value={localP.cotePassageMm} onChange={v=>update('cotePassageMm',v)} />}</div>}
+                <SectionTitle title="Porte d'Entrée" />
+                <div className="text-sm text-slate-500 mb-4 flex items-center bg-blue-50 p-2 rounded text-blue-700"><CheckCircle size={16} className="mr-2"/> Seuil PMR inclus</div>
+                <ToggleGroup label="Remplissage" options={[{label: 'Panneau Alu', value: 'PANNEAU_DECORATIF_ALU'}, {label: 'Panneau Sandwich', value: 'PANNEAU_SANDWICH'}, {label: 'Vitrée', value: 'VITREE'}]} value={p.remplissage} onChange={(v) => update('remplissage', v)} />
+                {p.largeurMm && p.largeurMm > 1000 && (
+                  <div className="mt-4 pt-4 border-t border-blue-100 bg-blue-50 p-3 rounded">
+                    <BooleanToggle label="Ajouter Tierce Vitrée ?" value={p.tierce} onChange={(v) => update('tierce', v)} />
+                    {p.tierce && <div className="mt-2 animate-in fade-in"><NumericInput label="Cote de passage (Ouvrant)" value={p.cotePassageMm} onChange={(v)=>update('cotePassageMm',v)} /></div>}
+                  </div>
+                )}
               </Card>
             )}
 
-            {localP.type === 'VOLET_ROULANT' && (
+            {p.type === 'VOLET_ROULANT' && (
               <Card className="p-4">
                 <SectionTitle title="Volet Roulant" />
-                <div className="mb-4 bg-slate-100 p-2 rounded"><label className="text-xs font-bold uppercase text-slate-500">Liaison</label><select className="w-full mt-1 p-2 border rounded" value={localP.lieAProduitId||''} onChange={e=>update('lieAProduitId',e.target.value)}><option value="">-- Indépendant --</option>{state.products.filter(pr=>pr.id!==localP.id&&['FENETRE','BAIE_COULISSANTE'].includes(pr.type)).map(pr=><option key={pr.id} value={pr.id}>#{pr.index} {pr.type} {pr.largeurMm}x{pr.hauteurMm}</option>)}</select></div>
-                <ToggleGroup label="Manoeuvre" options={[{label:'Filaire',value:'FILAIRE'},{label:'Radio',value:'RADIO'},{label:'Solaire',value:'SOLAIRE'}]} value={localP.manoeuvre} onChange={v=>update('manoeuvre',v)} />
-                {localP.manoeuvre !== 'SOLAIRE' && <ToggleGroup label="Côté Câble" options={[{label:'Gauche',value:'GAUCHE'},{label:'Droite',value:'DROITE'}]} value={localP.sortieCable} onChange={v=>update('sortieCable',v)} />}
-                <div className="mt-4 pt-4 border-t"><BooleanToggle label="Monobloc ?" value={localP.monobloc} onChange={v=>update('monobloc',v)} />{localP.monobloc && <div className="bg-blue-50 p-2 mt-2 rounded"><NumericInput label="Coffre à déduire (mm)" value={localP.coffreADeduireMm} onChange={v=>update('coffreADeduireMm',v)} /></div>}</div>
+                <div className="mb-4 bg-slate-100 p-3 rounded">
+                  <label className="block text-sm font-medium mb-1">Lier à une menuiserie</label>
+                  <select className="w-full p-2 border rounded" value={p.lieAProduitId || ''} onChange={e => update('lieAProduitId', e.target.value)}>
+                    <option value="">-- Indépendant --</option>
+                    {products.filter(prod => prod.id !== p.id && ['FENETRE', 'BAIE_COULISSANTE'].includes(prod.type)).map(prod => (
+                      <option key={prod.id} value={prod.id}>#{prod.index} {prod.type} {prod.largeurMm}x{prod.hauteurMm}</option>
+                    ))}
+                  </select>
+                </div>
+                <ToggleGroup label="Manoeuvre" options={[{label: 'Filaire', value: 'FILAIRE'}, {label: 'Radio', value: 'RADIO'}, {label: 'Solaire', value: 'SOLAIRE'}]} value={p.manoeuvre} onChange={(v) => update('manoeuvre', v)} />
+                {p.manoeuvre !== 'SOLAIRE' && <ToggleGroup label="Sortie Câble" options={[{label: 'Gauche', value: 'GAUCHE'}, {label: 'Droite', value: 'DROITE'}]} value={p.sortieCable} onChange={(v) => update('sortieCable', v)} />}
+                {(p.manoeuvre === 'RADIO' || p.manoeuvre === 'SOLAIRE') && (
+                  <div className="mt-4 border-t pt-2">
+                     <BooleanToggle label="Option Box Domotique" value={p.boxDomotique} onChange={(v) => update('boxDomotique', v)} />
+                     {p.boxDomotique && <input type="text" placeholder="Marque..." className="w-full p-2 border rounded mt-2" value={p.boxDomotiqueNote || ''} onChange={e => update('boxDomotiqueNote', e.target.value)} />}
+                  </div>
+                )}
+                <div className="mt-4 pt-4 border-t">
+                  <BooleanToggle label="Volet Monobloc ?" value={p.monobloc} onChange={(v) => update('monobloc', v)} />
+                  {p.monobloc && (
+                    <div className="bg-blue-50 p-2 mt-2 rounded">
+                      <NumericInput label="Hauteur Coffre à déduire" value={p.coffreADeduireMm} onChange={(v)=>update('coffreADeduireMm',v)} />
+                      {p.hauteurMm && p.coffreADeduireMm && <div className="text-right text-sm font-bold text-blue-700">Passage: {p.hauteurMm - p.coffreADeduireMm} mm</div>}
+                    </div>
+                  )}
+                </div>
               </Card>
             )}
-            
-            {ValidationService.hasAdvancedOptions(localP.type) && (
-              <div className="border rounded-lg bg-white overflow-hidden"><button onClick={()=>setShowAdvanced(!showAdvanced)} className="w-full flex justify-between p-3 bg-slate-50 font-medium"><span>Options Avancées</span>{showAdvanced?<ChevronUp size={18}/>:<ChevronDown size={18}/>}</button>
-                {showAdvanced && <div className="p-4 space-y-4">
-                  {['FENETRE','PORTE_ENTREE'].includes(localP.type) && <BooleanToggle label="Ouv. Extérieure" value={localP.ouvertureExterieure} onChange={v=>update('ouvertureExterieure',v)} />}
-                  {localP.type === 'FENETRE' && <BooleanToggle label="Serrure Clé" value={localP.serrureCle} onChange={v=>update('serrureCle',v)} />}
-                  {localP.type === 'VOLET_ROULANT' && <><ToggleGroup label="Moteur" options={[{label:'10Nm',value:10},{label:'20Nm',value:20}]} value={localP.coupleMoteur||10} onChange={v=>update('coupleMoteur',v)} /><ToggleGroup label="Pose" options={[{label:'Réno',value:'RENO'},{label:'Tradi',value:'TRADI'},{label:'Tunnel',value:'TUNNEL'}]} value={localP.pose} onChange={v=>update('pose',v)} /></>}
-                </div>}
+
+            {ValidationService.hasAdvancedOptions(p.type) && (
+              <div className="border border-slate-200 rounded-lg bg-white overflow-hidden">
+                <button onClick={() => setShowAdvanced(!showAdvanced)} className="w-full flex justify-between items-center p-3 bg-slate-50 hover:bg-slate-100 text-slate-600 font-medium">
+                  <span>Options Avancées</span>{showAdvanced ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                </button>
+                {showAdvanced && (
+                  <div className="p-4 space-y-4">
+                     {p.type === 'FENETRE' && <BooleanToggle label="Ouverture Extérieure" value={p.ouvertureExterieure} onChange={(v) => update('ouvertureExterieure', v)} />}
+                     {p.type === 'FENETRE' && <BooleanToggle label="Serrure à clé" value={p.serrureCle} onChange={(v) => update('serrureCle', v)} />}
+                     {p.type === 'PORTE_ENTREE' && <BooleanToggle label="Ouverture Extérieure" value={p.ouvertureExterieure} onChange={(v) => update('ouvertureExterieure', v)} />}
+                     {p.type === 'VOLET_ROULANT' && (
+                       <>
+                         <ToggleGroup label="Couple Moteur" options={[{label: '10Nm', value: 10}, {label: '20Nm', value: 20}]} value={p.coupleMoteur || 10} onChange={(v) => update('coupleMoteur', v)} />
+                         <ToggleGroup label="Type de Pose" options={[{label:'Réno', value:'RENO'}, {label:'Tradi', value:'TRADI'}, {label:'Tunnel', value:'TUNNEL'}]} value={p.pose} onChange={(v)=>update('pose',v)} />
+                       </>
+                     )}
+                  </div>
+                )}
               </div>
             )}
 
-            <Card className="p-4"><SectionTitle title="Visuels" /><DrawingCanvas data={localP.dessin} onChange={d=>update('dessin',d)} /></Card>
-            <Card className="p-4"><label className="text-sm font-medium">Notes</label><textarea className="w-full p-2 border rounded h-24" value={localP.notes||''} onChange={e=>update('notes',e.target.value)} /></Card>
+            <Card className="p-4">
+              <SectionTitle title="Visuels" />
+              <DrawingCanvas data={p.dessin} onChange={(d) => update('dessin', d)} />
+            </Card>
+
+            <Card className="p-4">
+              <label className="text-sm font-medium text-slate-700 mb-1">Notes Complémentaires</label>
+              <textarea className="w-full p-2 border rounded-lg h-24" placeholder="Pose, accès..." value={p.notes || ''} onChange={e => update('notes', e.target.value)} />
+            </Card>
           </div>
         </div>
       );
     };
 
-    // --- 5. EXPORT ENGINE (PDF & SVG) ---
+    // --- 5. EXPORT ---
     
+    // NOUVELLE FONCTION POUR GENERER LE SVG DU DESSIN
     const generateSVGFromDrawing = (drawing) => {
         if (!drawing || !drawing.lines || drawing.lines.length === 0) return 'Aucun dessin';
+        const width = 350;
+        const height = 250;
         let paths = '';
         drawing.lines.forEach(line => {
             if (line.length < 2) return;
             let d = `M ${line[0].x} ${line[0].y}`;
-            for (let i = 1; i < line.length; i++) d += ` L ${line[i].x} ${line[i].y}`;
+            for (let i = 1; i < line.length; i++) {
+                d += ` L ${line[i].x} ${line[i].y}`;
+            }
             paths += `<path d="${d}" stroke="#2563EB" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
         });
-        return `<svg width="100%" height="100%" viewBox="0 0 350 250" preserveAspectRatio="xMidYMid meet" style="background-color:#f8fafc;">${paths}</svg>`;
+        return `<svg width="100%" height="100%" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" style="background-color: #f8fafc;">${paths}</svg>`;
     };
 
-    // Génération du contenu HTML qui sera transformé en PDF
-    const getReportTemplate = (chantier, products, finalDate) => {
-      const dateStr = new Date(chantier.date).toLocaleDateString('fr-FR');
-      let html = `
-        <div style="font-family:Helvetica,sans-serif; padding:20px; color:#1e293b; background:#fff;">
-          <h1 style="color:#2563EB; border-bottom:2px solid #2563EB; padding-bottom:10px; font-size:24px; margin-bottom:20px;">SARANGE - Fiche métrage</h1>
-          
-          <table style="width:100%; border-collapse:collapse; margin-bottom:20px; background:#f8fafc; border:1px solid #e2e8f0;">
-            <tr>
-              <td style="padding:12px; vertical-align:top; width:50%;">
-                <div style="font-weight:bold; color:#64748b; font-size:10px; text-transform:uppercase;">Client</div>
-                <div style="font-size:14px; color:#0f172a; margin-bottom:8px;">${chantier.client}</div>
-                <div style="font-weight:bold; color:#64748b; font-size:10px; text-transform:uppercase;">Adresse</div>
-                <div style="font-size:14px; color:#0f172a; margin-bottom:8px;">${chantier.adresse}</div>
-              </td>
-              <td style="padding:12px; vertical-align:top; width:50%;">
-                <div style="font-weight:bold; color:#64748b; font-size:10px; text-transform:uppercase;">Date Métrage</div>
-                <div style="font-size:14px; color:#0f172a; margin-bottom:8px;">${dateStr}</div>
-                <div style="font-weight:bold; color:#64748b; font-size:10px; text-transform:uppercase;">Contrat</div>
-                <div style="font-size:14px; color:${chantier.typeContrat==='FOURNITURE_ET_POSE'?'#16a34a':'#2563EB'}; font-weight:bold;">${chantier.typeContrat==='FOURNITURE_ET_POSE'?'POSE INCLUSE':'FOURNITURE SEULE'}</div>
-              </td>
-            </tr>
-          </table>
-
-          <h3 style="margin-top:20px; margin-bottom:10px; font-size:16px;">Détails Techniques</h3>
+    const generateReportHTML = (chantier, products, finalizationDate) => {
+      const styles = `
+        body { font-family: 'Helvetica', sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; color: #1e293b; background: #fff; }
+        h1 { color: #2563EB; border-bottom: 2px solid #2563EB; padding-bottom: 10px; font-size: 24px; }
+        .header-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; background: #f8fafc; border: 1px solid #e2e8f0; }
+        .header-table td { padding: 12px; vertical-align: top; width: 50%; }
+        .header-label { font-weight: bold; color: #64748b; font-size: 0.9em; text-transform: uppercase; }
+        .header-value { font-size: 1.1em; color: #0f172a; margin-bottom: 8px; }
+        .stats-bar { display: flex; gap: 15px; margin-bottom: 30px; }
+        .stat-item { flex: 1; background: #eff6ff; padding: 10px; border: 1px solid #dbeafe; border-radius: 6px; text-align: center; }
+        .product-block { border: 2px solid #cbd5e1; margin-bottom: 25px; page-break-inside: avoid; border-radius: 8px; overflow: hidden; }
+        .product-header { background: #f1f5f9; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #cbd5e1; font-weight: bold; font-size: 1.1em; }
+        .grid-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 0; }
+        .specs-col { padding: 15px; border-right: 1px solid #e2e8f0; }
+        .visual-col { padding: 15px; display: flex; align-items: center; justify-content: center; background: #fcfcfc; }
+        .tech-table { width: 100%; border-collapse: collapse; font-size: 0.95em; }
+        .tech-table td { padding: 4px 0; vertical-align: top; }
+        .tech-label { width: 160px; color: #64748b; font-weight: 600; }
+        .tech-val { color: #0f172a; font-weight: 500; }
+        .tech-val.highlight { color: #2563EB; }
+        .tech-val.alert { color: #d97706; }
+        /* Style modifié pour accueillir le SVG */
+        .drawing-box { border: 1px dashed #cbd5e1; width: 100%; height: 180px; display: flex; align-items: center; justify-content: center; font-style: italic; color: #94a3b8; overflow: hidden; }
+        .final-stamp { text-align: right; font-size: 0.8em; color: #94a3b8; margin-top: 50px; border-top: 1px solid #eee; padding-top: 10px; }
+        @media print { .no-print { display: none; } button { display: none; } body { padding: 0; } }
       `;
 
+      let html = `<html><head><meta charset="utf-8"><title>Relevé - ${chantier.client}</title><style>${styles}</style></head><body><div class="no-print" style="margin-bottom:20px; text-align:right;"><button onclick="window.print()" style="background:#2563EB; color:white; padding:10px 20px; border:none; border-radius:6px; cursor:pointer;">Imprimer / PDF</button></div><h1>SARANGE - Fiche Fabrication</h1><table class="header-table"><tr><td><div class="header-label">Client</div><div class="header-value">${chantier.client}</div><div class="header-label">Adresse</div><div class="header-value">${chantier.adresse}</div><div class="header-label">Contacts</div><div class="header-value">Tél: ${chantier.telephone} ${chantier.email ? `<br>Email: ${chantier.email}` : ''}</div></td><td><div class="header-label">Contrat</div><div class="header-value" style="color:${chantier.typeContrat === 'FOURNITURE_ET_POSE' ? '#16a34a' : '#2563EB'}">${chantier.typeContrat === 'FOURNITURE_ET_POSE' ? '✅ FOURNITURE ET POSE' : '📦 FOURNITURE SEULE'}</div><div class="header-label">Technicien</div><div class="header-value">${chantier.technicien || '-'}</div><div class="header-label">Date Relevé</div><div class="header-value">${new Date(chantier.date).toLocaleDateString()}</div></td></tr></table><div class="stats-bar"><div class="stat-item"><strong>${products.length}</strong> Produits</div><div class="stat-item"><strong>${products.filter(p => !!p.dessin?.lines.length).length}</strong> Dessins</div><div class="stat-item" style="color:#d97706"><strong>${products.filter(p => p.largeurMm && p.largeurMm < 100).length}</strong> Cotes Suspectes</div></div><h3>Détails Techniques (Atelier)</h3>`;
+
       products.forEach(p => {
-        let rows = `<tr><td style="width:140px; color:#64748b; font-weight:600; padding:2px 0;">Dimensions</td><td style="color:#0f172a; font-weight:bold;">L ${p.largeurMm} x H ${p.hauteurMm} mm</td></tr>`;
-        
-        // Helpers pour ajouter des lignes proprement
-        const add = (l, v) => { if(v) rows += `<tr><td style="width:140px; color:#64748b; font-weight:600; padding:2px 0;">${l}</td><td style="color:#0f172a;">${v===true?'OUI':v}</td></tr>`; };
-        
+        let rows = '';
+        const addRow = (label, val, highlight = false) => {
+          if(val === undefined || val === null || val === false) return;
+          const displayVal = val === true ? 'OUI' : val;
+          rows += `<tr><td class="tech-label">${label}</td><td class="tech-val ${highlight ? 'highlight' : ''}">${displayVal}</td></tr>`;
+        };
+        addRow('Dimensions', `<strong>L ${p.largeurMm} x H ${p.hauteurMm} mm</strong>`, true);
+        if (ValidationService.isMeasureSuspicious(p.largeurMm) || ValidationService.isMeasureSuspicious(p.hauteurMm)) rows += `<tr><td class="tech-label">⚠️ ALERTE</td><td class="tech-val alert">COTE < 100mm</td></tr>`;
         if (['FENETRE', 'BAIE_COULISSANTE', 'PORTE_ENTREE', 'PORTE_SERVICE'].includes(p.type)) {
-            add('Matière', p.matiere);
-            add('Profil', p.profil);
-            add('Couleur', `${p.couleur} ${p.couleurAutre||''}`);
-            if(p.vitrageFlags) {
-                let v = []; if(p.vitrageFlags.standard) v.push('4/20/4'); if(p.vitrageFlags.g200) v.push('G200'); if(p.vitrageFlags.feuillete1f) v.push('Feuil. 1F');
-                if(v.length) add('Vitrage', v.join(', '));
-            }
+          addRow('Matière', p.matiere);
+          addRow('Profil', `${p.profil} ${p.profil === 'ISO' && p.isoMm ? `(Aile de ${p.isoMm}mm)` : ''}`);
+          addRow('Couleur', `${p.couleur} ${p.couleurAutre ? `(${p.couleurAutre})` : ''}`);
+          const v = p.vitrageFlags;
+          if (v) {
+            let vArr = [];
+            if(v.standard) vArr.push('Standard 4/20/4'); if(v.g200) vArr.push('G200'); if(v.feuillete1f) vArr.push('Feuilleté 1 Face'); if(v.feuillete2f) vArr.push('Feuilleté 2 Faces');
+            if(vArr.length > 0) addRow('Vitrage', vArr.join(', '));
+          }
+          if (p.type === 'FENETRE') { addRow('Oscillo-Battant', p.oscilloBattant); addRow('Grille Ventilation', p.grilleVentilation); addRow('Hauteur Poignée', p.poigneeHauteur === 'CENTREE' ? 'Centrée' : `${p.poigneeHauteurMm} mm`); addRow('Serrure à Clé', p.serrureCle); addRow('Ouv. Extérieure', p.ouvertureExterieure); }
+          if (p.type === 'PORTE_ENTREE') { addRow('Remplissage', p.remplissage); addRow('Seuil PMR', 'OUI (Inclus)'); if(p.tierce) addRow('Tierce Vitrée', `OUI - Cote Passage: ${p.cotePassageMm}mm`); addRow('Ouv. Extérieure', p.ouvertureExterieure); }
+          if (p.type === 'PORTE_SERVICE') addRow('Seuil PMR', 'OUI (Inclus)');
         }
-        if (p.type === 'FENETRE') { add('Oscillo-Battant', p.oscilloBattant); add('Grille Ventil', p.grilleVentilation); add('Poignée', p.poigneeHauteur==='CENTREE'?'Centrée':`${p.poigneeHauteurMm}mm`); }
-        if (p.type === 'PORTE_ENTREE') { add('Remplissage', p.remplissage); add('Tierce', p.tierce?`Passage: ${p.cotePassageMm}mm`:null); }
-        if (p.type === 'VOLET_ROULANT') { add('Manoeuvre', p.manoeuvre); add('Côté Câble', p.sortieCable); add('Pose', p.pose); add('Monobloc', p.monobloc?`Déduc: -${p.coffreADeduireMm}mm`:null); }
-        add('Notes', p.notes);
-
-        html += `
-          <div style="border:2px solid #cbd5e1; border-radius:8px; overflow:hidden; margin-bottom:20px; page-break-inside:avoid;">
-            <div style="background:#f1f5f9; padding:8px 12px; font-weight:bold; border-bottom:1px solid #cbd5e1;">#${String(p.index).padStart(2,'0')} - ${p.type}</div>
-            <div style="display:flex;">
-                <div style="padding:10px; width:60%; border-right:1px solid #e2e8f0;">
-                    <table style="width:100%; font-size:12px;">${rows}</table>
-                </div>
-                <div style="width:40%; padding:10px; display:flex; align-items:center; justify-content:center;">
-                    <div style="width:100%; height:150px; border:1px dashed #cbd5e1;">${generateSVGFromDrawing(p.dessin)}</div>
-                </div>
-            </div>
-          </div>
-        `;
+        if (p.type === 'VOLET_ROULANT') { addRow('Manoeuvre', p.manoeuvre); if(p.sortieCable) addRow('Sortie Câble', p.sortieCable); if(p.coupleMoteur) addRow('Couple Moteur', `${p.coupleMoteur} Nm`); if(p.boxDomotique) addRow('Box Domotique', `OUI ${p.boxDomotiqueNote ? `(${p.boxDomotiqueNote})` : ''}`); if(p.pose) addRow('Type de Pose', p.pose); if(p.monobloc) addRow('Monobloc', `OUI (Déduction coffre: -${p.coffreADeduireMm}mm)`); if(p.lieAProduitId) addRow('Lié au produit', `Liaison ID: #${products.find(x=>x.id===p.lieAProduitId)?.index}`); }
+        if(p.type === 'AUTRE') addRow('Description', p.description);
+        if(p.notes) rows += `<tr><td class="tech-label">Notes</td><td class="tech-val" style="font-style:italic; background:#fffbe0; padding:5px;">${p.notes}</td></tr>`;
+        
+        // ICI: ON APPELLE LA FONCTION DE GENERATION SVG
+        html += `<div class="product-block" style="${!p.isValid ? 'border-color: #dc2626' : ''}"><div class="product-header"><span>#${String(p.index).padStart(2,'0')} - ${p.type}</span>${!p.isValid ? '<span style="color:#dc2626; font-size:0.8em">⚠ INFO MANQUANTE</span>' : ''}</div><div class="grid-layout"><div class="specs-col"><table class="tech-table">${rows}</table></div><div class="visual-col"><div class="drawing-box">${generateSVGFromDrawing(p.dessin)}</div></div></div></div>`;
       });
-
-      html += `<div style="text-align:right; font-size:10px; color:#94a3b8; margin-top:20px; border-top:1px solid #eee; padding-top:5px;">Dossier finalisé le ${new Date(finalizationDate).toLocaleString('fr-FR')}</div></div>`;
+      html += `<div class="final-stamp">Dossier finalisé le ${new Date(finalizationDate).toLocaleString('fr-FR')}</div></body></html>`;
       return html;
     };
-
 
     // --- 6. CHANTIER LIST ---
     const ChantiersList = () => {
@@ -389,171 +542,211 @@
       const [newC, setNewC] = useState({ client: '', adresse: '', typeContrat: 'FOURNITURE_SEULE', telephone: '' });
 
       const handleAdd = () => {
-        if (!newC.client || !newC.telephone) return alert("Infos manquantes");
-        addChantier({ ...newC, date: new Date().toISOString() });
+        if (!newC.client || !newC.telephone) return alert("Nom et Téléphone obligatoires");
+        addChantier({ 
+          client: newC.client, adresse: newC.adresse || '', typeContrat: newC.typeContrat, telephone: newC.telephone, email: newC.email,
+          date: new Date().toISOString(), observations: ''
+        });
         setIsAdding(false); setNewC({ client: '', adresse: '', typeContrat: 'FOURNITURE_SEULE', telephone: '' });
       };
 
       return (
         <div className="max-w-4xl mx-auto p-4">
-          <div className="flex justify-between items-center mb-6"><h1 className="text-2xl font-bold text-slate-800">SARANGE <span className="text-blue-600">Pro</span></h1><Button onClick={()=>setIsAdding(true)} icon={Plus}>Nouveau</Button></div>
-          {isAdding && <Card className="p-4 mb-6 bg-blue-50"><h3 className="font-bold mb-3">Nouveau Dossier</h3><div className="grid md:grid-cols-2 gap-3 mb-3"><input className="p-2 border rounded" placeholder="Nom Client" value={newC.client} onChange={e=>setNewC({...newC,client:e.target.value})}/><input className="p-2 border rounded" placeholder="Téléphone" value={newC.telephone} onChange={e=>setNewC({...newC,telephone:e.target.value})}/><select className="p-2 border rounded" value={newC.typeContrat} onChange={e=>setNewC({...newC,typeContrat:e.target.value})}><option value="FOURNITURE_SEULE">Fourniture</option><option value="FOURNITURE_ET_POSE">Pose Incluse</option></select></div><input className="w-full mb-3 p-2 border rounded" placeholder="Adresse" value={newC.adresse} onChange={e=>setNewC({...newC,adresse:e.target.value})}/><div className="flex justify-end gap-2"><Button variant="secondary" onClick={()=>setIsAdding(false)}>Annuler</Button><Button onClick={handleAdd}>Créer</Button></div></Card>}
-          <div className="grid gap-4 md:grid-cols-2">{state.chantiers.map(c=>(<div key={c.id} onClick={()=>selectChantier(c.id)} className="bg-white p-5 rounded-lg border shadow-sm relative"><h3 className="font-bold">{c.client}</h3><p className="text-sm text-slate-500">{c.adresse}</p><div className="mt-2 text-xs flex gap-2"><span className="bg-slate-100 p-1 rounded">{new Date(c.date).toLocaleDateString()}</span>{c.dateFinalisation&&<span className="bg-purple-100 text-purple-700 p-1 rounded">Finalisé</span>}</div><button onClick={(e)=>{e.stopPropagation();confirm('Supprimer ?')&&deleteChantier(c.id)}} className="absolute bottom-4 right-4 text-slate-300 hover:text-red-500"><Trash2 size={18}/></button></div>))}</div>
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-2xl font-bold text-slate-800">SARANGE <span className="text-blue-600">Pro</span></h1>
+            <Button onClick={() => setIsAdding(true)} icon={Plus}>Nouveau Chantier</Button>
+          </div>
+
+          {isAdding && (
+            <Card className="p-4 mb-6 bg-blue-50 border-blue-100">
+              <h3 className="font-bold mb-3">Nouveau Dossier</h3>
+              <div className="grid md:grid-cols-2 gap-3 mb-3">
+                 <input className="p-2 border rounded" placeholder="Nom Client *" value={newC.client} onChange={e => setNewC({...newC, client: e.target.value})} />
+                 <input className="p-2 border rounded" placeholder="Téléphone *" type="tel" value={newC.telephone} onChange={e => setNewC({...newC, telephone: e.target.value})} />
+                 <input className="p-2 border rounded" placeholder="Email (Optionnel)" type="email" value={newC.email} onChange={e => setNewC({...newC, email: e.target.value})} />
+                 <select className="p-2 border rounded" value={newC.typeContrat} onChange={e => setNewC({...newC, typeContrat: e.target.value})}>
+                   <option value="FOURNITURE_SEULE">Fourniture Seule</option>
+                   <option value="FOURNITURE_ET_POSE">Fourniture et Pose</option>
+                 </select>
+              </div>
+              <input className="w-full mb-3 p-2 border rounded" placeholder="Adresse complète" value={newC.adresse} onChange={e => setNewC({...newC, adresse: e.target.value})} />
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" onClick={() => setIsAdding(false)}>Annuler</Button>
+                <Button onClick={handleAdd}>Créer Dossier</Button>
+              </div>
+            </Card>
+          )}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {state.chantiers.map(c => {
+              const incomplete = state.products.filter(p => p.chantierId === c.id && !p.isValid).length;
+              return (
+                <div key={c.id} onClick={() => selectChantier(c.id)} className="bg-white p-5 rounded-lg border hover:shadow-md cursor-pointer relative">
+                  <h3 className="font-bold text-lg">{c.client}</h3>
+                  <p className="text-slate-500 text-sm">{c.adresse}</p>
+                  <div className="flex gap-2 mt-2 text-xs">
+                    <span className="bg-slate-100 px-2 py-1 rounded">{new Date(c.date).toLocaleDateString()}</span>
+                    <span className={`px-2 py-1 rounded ${c.typeContrat === 'FOURNITURE_ET_POSE' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                      {c.typeContrat === 'FOURNITURE_ET_POSE' ? 'Pose incluse' : 'Fourniture seule'}
+                    </span>
+                    {c.dateFinalisation && <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded flex items-center"><CheckCircle size={10} className="mr-1"/> Finalisé</span>}
+                  </div>
+                  {incomplete > 0 && <div className="absolute top-4 right-4 flex text-amber-500 text-xs font-bold items-center"><AlertTriangle size={16} className="mr-1"/> {incomplete} à compléter</div>}
+                  <button onClick={(e) => { e.stopPropagation(); if(confirm('Supprimer ?')) deleteChantier(c.id); }} className="absolute bottom-4 right-4 text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
+                </div>
+              );
+            })}
+          </div>
         </div>
       );
     };
 
-    // --- 7. FINALISATION (MODAL & PDF) ---
+    // --- 7. FINALIZE ---
     const FinalizeModal = ({ chantier, products, onClose, onUpdateChantier }) => {
       const incompletes = products.filter(p => !p.isValid);
-      const [isGenerating, setIsGenerating] = useState(false);
+      const warnings = products.filter(p => ValidationService.isMeasureSuspicious(p.largeurMm) || ValidationService.isMeasureSuspicious(p.hauteurMm));
+      const [exported, setExported] = useState(false);
 
-      const handleExport = async (mode) => {
-        setIsGenerating(true);
-        try {
-            // 1. Sauvegarde Date
-            const now = new Date();
-            const finalDate = now.toISOString();
-            onUpdateChantier(chantier.id, { dateFinalisation: finalDate });
-
-            // 2. Nom du fichier : Métrage_Nom_JJ-MM-AAAA.pdf
-            const dateStr = now.toLocaleDateString('fr-FR').replace(/\//g, '-');
-            const filename = `Métrage_${chantier.client.replace(/\s+/g,'_')}_${dateStr}.pdf`;
-
-            // 3. Génération HTML
-            const template = getReportTemplate(chantier, products, finalDate);
-            
-            // 4. Création element temporaire
-            const element = document.createElement('div');
-            element.innerHTML = template;
-            // Hack pour html2pdf : mettre l'élément hors champ mais visible pour le render
-            element.style.width = '800px'; 
-            document.body.appendChild(element);
-
-            // 5. Options PDF
-            const opt = {
-                margin: 10,
-                filename: filename,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-            };
-
-            // 6. Action
-            const worker = html2pdf().set(opt).from(element);
-            
-            if (mode === 'download') {
-                await worker.save();
-            } else if (mode === 'whatsapp') {
-                // Pour WhatsApp, on doit générer le blob et utiliser le partage natif (Mobile)
-                const pdfBlob = await worker.output('blob');
-                const file = new File([pdfBlob], filename, { type: 'application/pdf' });
-                
-                if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-                    await navigator.share({
-                        files: [file],
-                        title: 'Fiche Métrage',
-                        text: `Bonjour, voici le métrage pour ${chantier.client}.`,
-                    });
-                } else {
-                    alert("Le partage direct de fichier n'est pas supporté sur ce navigateur. Le fichier va être téléchargé, vous pourrez l'envoyer manuellement.");
-                    await worker.save();
-                }
-            }
-            
-            document.body.removeChild(element);
-            onClose();
-
-        } catch (e) {
-            console.error(e);
-            alert("Erreur lors de la génération PDF : " + e.message);
-        } finally {
-            setIsGenerating(false);
-        }
+      const handleDownload = () => {
+        const finalizationTime = new Date().toISOString();
+        onUpdateChantier(chantier.id, { dateFinalisation: finalizationTime });
+        const html = generateReportHTML(chantier, products, finalizationTime);
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Export_${chantier.client.replace(/\s+/g, '_')}_${finalizationTime.split('T')[0]}.html`;
+        a.click();
+        setExported(true);
       };
 
       return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full p-6">
-            <h2 className="text-xl font-bold mb-4">Finalisation</h2>
+          <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6">
+            <h2 className="text-xl font-bold mb-4 flex items-center"><CheckCircle className="mr-2 text-blue-600"/> Finalisation Chantier</h2>
             {incompletes.length > 0 ? (
-                <div className="bg-red-50 p-4 rounded mb-4 text-red-700 font-bold">⚠️ Il reste {incompletes.length} produits incomplets.</div>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <h4 className="font-bold text-red-700 flex items-center mb-2"><AlertTriangle size={18} className="mr-2"/> Éléments Manquants ({incompletes.length})</h4>
+                <ul className="list-disc list-inside text-sm text-red-600 space-y-1">{incompletes.map(p => <li key={p.id}>Produit #{p.index} ({p.type}) : {p.validationErrors.join(', ')}</li>)}</ul>
+                <p className="text-xs mt-3 text-red-800">Veuillez corriger ces produits avant l'export définitif.</p>
+              </div>
             ) : (
-                <div className="bg-green-50 p-4 rounded mb-4 text-green-700 font-bold flex items-center"><CheckCircle className="mr-2"/> Dossier complet !</div>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 text-green-700 font-medium flex items-center"><CheckCircle size={20} className="mr-2"/> Tous les produits sont complets !</div>
             )}
-            
-            <div className="space-y-3 mt-6">
-                {isGenerating ? (
-                    <div className="text-center py-4 text-blue-600 font-bold animate-pulse">Génération du PDF en cours...</div>
-                ) : (
-                    <>
-                        <Button onClick={() => handleExport('whatsapp')} variant="whatsapp" disabled={incompletes.length > 0} className="w-full justify-center">
-                            <MessageCircle size={20} className="mr-2"/> Envoyer via WhatsApp
-                        </Button>
-                        <Button onClick={() => handleExport('download')} variant="secondary" disabled={incompletes.length > 0} className="w-full justify-center">
-                            <Download size={20} className="mr-2"/> Télécharger PDF
-                        </Button>
-                    </>
-                )}
-                <button onClick={onClose} className="w-full py-2 text-slate-400 text-sm">Annuler</button>
+            {warnings.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                <h4 className="font-bold text-amber-700 text-sm mb-1">⚠️ Alertes de mesures</h4>
+                <div className="text-xs text-amber-600">Certains produits ont des cotes inférieures à 100mm. Vérifiez si c'est normal.</div>
+              </div>
+            )}
+            <div className="flex flex-col gap-3 mt-6">
+              <button onClick={handleDownload} disabled={incompletes.length > 0} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold flex items-center justify-center disabled:bg-slate-300"><Download size={20} className="mr-2"/> Sauvegarder & Exporter (HTML)</button>
+              {exported && <div className="text-center text-sm text-green-600 font-bold bg-green-50 p-2 rounded">Fichier téléchargé et heure enregistrée !</div>}
+              <button onClick={onClose} className="mt-2 text-slate-500 text-sm hover:underline">Fermer</button>
             </div>
           </div>
         </div>
       );
     };
 
-    // --- 8. ROOT ---
+    // --- 8. CHANTIER DETAIL ---
     const ChantierDetail = () => {
       const { state, selectChantier, saveProduct, deleteProduct, updateChantier } = useAppStore();
       const chantier = state.chantiers.find(c => c.id === state.currentChantierId);
-      const products = state.products.filter(p => p.chantierId === chantier?.id).sort((a,b)=>a.index-b.index);
-      const [editing, setEditing] = useState(null);
-      const [finalizing, setFinalizing] = useState(false);
+      const products = state.products.filter(p => p.chantierId === chantier?.id).sort((a,b) => a.index - b.index);
+      const [editingProduct, setEditingProduct] = useState(null);
+      const [showFinalize, setShowFinalize] = useState(false);
 
-      if(!chantier) return <div>Chargement...</div>;
-      if(editing) return <ProductEditor product={editing} onSave={p=>{saveProduct(p);setEditing(null)}} onCancel={()=>setEditing(null)} />;
+      if (!chantier) return <div>Chargement...</div>;
+
+      const handleCreateProduct = () => {
+        setEditingProduct({
+          id: generateUUID(), chantierId: chantier.id, index: products.length + 1, type: 'FENETRE',
+          dateCreation: new Date().toISOString(), dateMaj: new Date().toISOString(), photos: [], isValid: false, validationErrors: []
+        });
+      };
+
+      if (editingProduct) return <ProductEditor product={editingProduct} onSave={(p) => { saveProduct(p); setEditingProduct(null); }} onCancel={() => setEditingProduct(null)} />;
 
       return (
         <div className="flex flex-col h-screen bg-slate-50">
           <div className="bg-white border-b px-4 py-3 flex items-center shadow-sm sticky top-0 z-10">
-            <button onClick={()=>selectChantier(null)} className="mr-3 p-2 bg-slate-100 rounded-full"><ArrowLeft size={24}/></button>
-            <div className="flex-1"><h2 className="font-bold truncate">{chantier.client}</h2><div className="text-xs text-slate-500">{products.length} Produits • {chantier.typeContrat==='FOURNITURE_ET_POSE'?'Pose Incluse':'Fourniture'}</div></div>
-            <button onClick={()=>setFinalizing(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex shadow-sm">Finaliser <CheckCircle size={16} className="ml-2"/></button>
+            <button onClick={() => selectChantier(null)} className="mr-3 p-2 hover:bg-slate-100 rounded-full"><ArrowLeft size={24}/></button>
+            <div className="flex-1">
+              <h2 className="font-bold text-lg truncate">{chantier.client}</h2>
+              <div className="flex items-center text-xs text-slate-500">
+                  <span>{products.length} Produits</span><span className="mx-2">•</span>
+                  <span>{chantier.typeContrat === 'FOURNITURE_ET_POSE' ? 'Pose Incluse' : 'Fourniture Seule'}</span>
+                  {chantier.dateFinalisation && <span className="ml-2 text-purple-600 font-bold flex items-center"><Clock size={10} className="mr-1"/> {new Date(chantier.dateFinalisation).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>}
+              </div>
+            </div>
+            <button onClick={() => setShowFinalize(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center shadow-sm hover:bg-blue-700">Finaliser <CheckCircle size={16} className="ml-2"/></button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {products.map(p => (
-              <div key={p.id} onClick={()=>setEditing(p)} className={`bg-white p-4 rounded-lg border-l-4 shadow-sm flex justify-between ${p.isValid?'border-green-500':'border-amber-500'}`}>
-                <div><div className="font-bold text-slate-800">#{String(p.index).padStart(2,'0')} {p.type}</div><div className="text-sm text-slate-500">{p.largeurMm} x {p.hauteurMm} mm</div></div>
-                <div className="flex flex-col justify-between items-end">{!p.isValid && <AlertTriangle size={16} className="text-amber-500"/>}<button onClick={(e)=>{e.stopPropagation();confirm('Supprimer?')&&deleteProduct(p.id)}} className="text-slate-300"><Trash2 size={16}/></button></div>
+              <div key={p.id} onClick={() => setEditingProduct(p)} className={`bg-white p-4 rounded-lg border-l-4 shadow-sm flex justify-between items-center cursor-pointer active:bg-slate-50 ${p.isValid ? 'border-l-green-500' : 'border-l-amber-500'}`}>
+                <div>
+                  <div className="flex items-center space-x-2"><span className="font-mono font-bold text-slate-400">#{String(p.index).padStart(2,'0')}</span><span className="font-bold text-slate-800">{p.type}</span></div>
+                  <div className="text-sm text-slate-600 mt-1">{p.largeurMm ? `${p.largeurMm} x ${p.hauteurMm} mm` : 'Dimensions manquantes'}</div>
+                  {ValidationService.isMeasureSuspicious(p.largeurMm) && <span className="text-amber-500 text-xs font-bold flex items-center mt-1"><AlertTriangle size={10} className="mr-1"/> Cote suspecte</span>}
+                </div>
+                <div className="flex flex-col items-end space-y-2">
+                  {!p.isValid && <AlertTriangle size={18} className="text-amber-500" />}
+                  <button onClick={(e) => { e.stopPropagation(); if(confirm('Supprimer ?')) deleteProduct(p.id); }} className="text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
+                </div>
               </div>
             ))}
-            <button onClick={()=>setEditing({id:generateUUID(),chantierId:chantier.id,index:products.length+1,type:'FENETRE',isValid:false,validationErrors:[],dessin:{lines:[]}})} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 flex flex-col items-center"><Plus size={32} className="mb-2"/>Ajouter Produit</button>
+            <button onClick={handleCreateProduct} className="w-full py-4 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 font-medium hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 flex flex-col items-center justify-center"><Plus size={32} className="mb-2 opacity-50" /> Ajouter un Produit</button>
           </div>
-          {finalizing && <FinalizeModal chantier={chantier} products={products} onClose={()=>setFinalizing(false)} onUpdateChantier={updateChantier} />}
+          {showFinalize && <FinalizeModal chantier={chantier} products={products} onClose={() => setShowFinalize(false)} onUpdateChantier={updateChantier} />}
         </div>
       );
     };
 
+    // --- 9. APP ROOT ---
     function App() {
-      const [state, setState] = useState(() => { try { return JSON.parse(localStorage.getItem('sarange_db_v4')) || {chantiers:[],products:[],currentChantierId:null} } catch { return {chantiers:[],products:[],currentChantierId:null} } });
-      useEffect(() => localStorage.setItem('sarange_db_v4', JSON.stringify(state)), [state]);
-      
+      const [state, setState] = useState(() => {
+        try {
+          const saved = localStorage.getItem('sarange_db_v3');
+          return saved ? JSON.parse(saved) : { chantiers: [], products: [], currentChantierId: null };
+        } catch(e) { return { chantiers: [], products: [], currentChantierId: null }; }
+      });
+
+      useEffect(() => localStorage.setItem('sarange_db_v3', JSON.stringify(state)), [state]);
+
       const api = useMemo(() => ({
         state,
-        addChantier: c => setState(s => ({...s, chantiers: [{...c, id: generateUUID()}, ...s.chantiers]})),
-        updateChantier: (id, d) => setState(s => ({...s, chantiers: s.chantiers.map(c=>c.id===id?{...c,...d}:c)})),
-        selectChantier: id => setState(s => ({...s, currentChantierId: id})),
-        deleteChantier: id => setState(s => ({...s, chantiers: s.chantiers.filter(c=>c.id!==id), products: s.products.filter(p=>p.chantierId!==id)})),
-        saveProduct: p => setState(s => { const ex = s.products.find(x=>x.id===p.id); return {...s, products: ex ? s.products.map(x=>x.id===p.id?p:x) : [...s.products, p]} }),
-        deleteProduct: id => setState(s => ({...s, products: s.products.filter(p=>p.id!==id)}))
+        addChantier: (c) => setState(prev => ({ ...prev, chantiers: [{ ...c, id: generateUUID() }, ...prev.chantiers] })),
+        updateChantier: (id, data) => setState(prev => ({ ...prev, chantiers: prev.chantiers.map(c => c.id === id ? { ...c, ...data } : c) })),
+        selectChantier: (id) => setState(prev => ({ ...prev, currentChantierId: id })),
+        deleteChantier: (id) => setState(prev => ({ ...prev, chantiers: prev.chantiers.filter(x => x.id !== id), products: prev.products.filter(x => x.chantierId !== id) })),
+        saveProduct: (p) => setState(prev => {
+          const exists = prev.products.find(x => x.id === p.id);
+          const newList = exists ? prev.products.map(x => x.id === p.id ? { ...p, dateMaj: new Date().toISOString() } : x) : [...prev.products, p];
+          return { ...prev, products: newList };
+        }),
+        deleteProduct: (id) => setState(prev => ({ ...prev, products: prev.products.filter(x => x.id !== id) }))
       }), [state]);
 
-      return <AppContext.Provider value={api}><div className="min-h-screen bg-slate-100 font-sans text-slate-900">{state.currentChantierId ? <ChantierDetail /> : <ChantiersList />}</div></AppContext.Provider>;
+      return (
+        <AppContext.Provider value={api}>
+          <div className="min-h-screen bg-slate-100 font-sans text-slate-900">
+            {state.currentChantierId ? <ChantierDetail /> : <ChantiersList />}
+          </div>
+        </AppContext.Provider>
+      );
     }
 
-    createRoot(document.getElementById('root')).render(<App />);
+    // --- 10. RENDER ---
+    const root = createRoot(document.getElementById('root'));
+    root.render(<App />);
 
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(e=>console.log(e));
+    // --- SERVICE WORKER ---
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js').catch(err => console.log('SW Fail', err));
+      });
+    }
   </script>
 </body>
 </html>
