@@ -5,12 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Sarange Pro</title>
   
+  <!-- PWA / Mobile Settings (Vos fichiers locaux) -->
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <meta name="theme-color" content="#2563EB">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -18,63 +20,113 @@
       theme: {
         extend: {
           colors: {
-            slate: { 850: '#1a202c', 900: '#0f172a', 950: '#020617' },
+            slate: { 850: '#1a202c', 950: '#0f172a' },
             brand: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563EB', 700: '#1d4ed8' }
           },
-          screens: { 'xs': '480px' }
+          animation: { 'fade-in': 'fadeIn 0.3s ease-out' },
+          keyframes: { fadeIn: { '0%': { opacity: '0', transform: 'translateY(10px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } } }
         }
       }
     }
   </script>
+
+  <!-- React & Babel -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   
   <style>
-    body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; font-family: system-ui, -apple-system, sans-serif; }
+    /* Reset & Base */
+    body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     input, textarea, select, button { font-size: 16px; touch-action: manipulation; } 
     .no-select { user-select: none; -webkit-user-select: none; }
     .safe-pb { padding-bottom: env(safe-area-inset-bottom, 20px); }
-    
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .dark ::-webkit-scrollbar-thumb { background: #475569; }
+
     /* Autocomplete */
     .suggestions-list { max-height: 250px; overflow-y: auto; position: absolute; z-index: 50; width: 100%; background: white; border: 1px solid #e2e8f0; border-radius: 0.5rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); margin-top: 4px; }
     .dark .suggestions-list { background: #1e293b; border-color: #334155; }
-    
-    /* Photos */
-    .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; margin-top: 10px; }
-    .photo-thumb { width: 100%; height: 100px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0; }
 
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-    .dark ::-webkit-scrollbar-thumb { background: #475569; }
+    /* Print */
+    @media print {
+      .no-print { display: none !important; }
+      body { background: white !important; color: black !important; padding: 0 !important; margin: 0 !important; overflow: visible !important; }
+    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200">
   
-  <div id="root" class="h-screen flex flex-col">
-    <div class="m-auto flex flex-col items-center justify-center text-slate-400">
+  <div id="root">
+    <div class="flex flex-col items-center justify-center h-screen text-slate-400">
       <div class="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-brand-600 mb-4"></div>
       <p class="font-medium">Chargement...</p>
     </div>
   </div>
 
   <script type="text/babel" data-type="module" data-presets="react">
-    import React, { useState, useEffect, useRef, useMemo, createContext, useContext } from 'https://esm.sh/react@18.2.0';
+    import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'https://esm.sh/react@18.2.0';
     import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
     import { 
       Plus, Trash2, Save, ArrowLeft, FileText, Check, AlertTriangle, PenTool, X, 
       ChevronDown, ChevronUp, Share, Printer, CheckCircle, Download, Eye, Clock, 
       MessageCircle, MapPin, Copy, Camera, Image as ImageIcon, Moon, Sun, 
-      LayoutDashboard, Search, AlertCircle, Link as LinkIcon 
+      LayoutDashboard, Search, Settings, AlertCircle 
     } from 'https://esm.sh/lucide-react@0.263.1';
 
-    // --- UTILS ---
+    // --- ROBUST UTILS ---
     const generateUUID = () => {
-      if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-        const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+      }
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
       });
+    };
+
+    // --- DATABASE ENGINE (IndexedDB) ---
+    const DB_NAME = 'SarangeDB_V2';
+    const DB_VERSION = 1;
+    const hasIDB = (typeof window !== 'undefined') && ('indexedDB' in window);
+    const dbPromise = hasIDB ? new Promise((resolve, reject) => {
+      try {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onerror = () => { console.warn("IDB Failed"); resolve(null); }; 
+        request.onsuccess = () => resolve(request.result);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('data')) { db.createObjectStore('data', { keyPath: 'key' }); }
+        };
+      } catch(e) { resolve(null); }
+    }) : Promise.resolve(null);
+    const memoryStore = {};
+    const Storage = {
+      async get(key) {
+        const db = await dbPromise;
+        if (!db) return memoryStore[key] || null;
+        return new Promise((resolve) => {
+          try {
+            const tx = db.transaction('data', 'readonly');
+            const store = tx.objectStore('data');
+            const req = store.get(key);
+            req.onsuccess = () => resolve(req.result ? req.result.value : null);
+            req.onerror = () => resolve(null);
+          } catch(e) { resolve(null); }
+        });
+      },
+      async set(key, value) {
+        const db = await dbPromise;
+        if (!db) { memoryStore[key] = value; return; }
+        return new Promise((resolve) => {
+          try {
+            const tx = db.transaction('data', 'readwrite');
+            const store = tx.objectStore('data');
+            const req = store.put({ key, value });
+            req.onsuccess = () => resolve();
+            req.onerror = () => resolve();
+          } catch(e) { resolve(); }
+        });
+      }
     };
 
     const compressImage = (file) => {
@@ -87,21 +139,22 @@
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
-                    const maxWidth = 1000; 
+                    const maxWidth = 1200; 
                     const scale = Math.min(1, maxWidth / img.width);
                     canvas.width = img.width * scale;
                     canvas.height = img.height * scale;
                     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    resolve(canvas.toDataURL('image/jpeg', 0.65));
+                    resolve(canvas.toDataURL('image/jpeg', 0.6));
                 };
             };
         });
     };
 
+    // --- RULES ---
     const ValidationService = {
       isMeasureSuspicious: (v, isMonobloc) => {
           if (isMonobloc) return false;
-          return v !== undefined && v > 0 && v < 100;
+          return v !== undefined && v > 0 && v < 150;
       },
       hasAdvancedOptions: (t) => ['FENETRE', 'VOLET_ROULANT', 'PORTE_ENTREE'].includes(t),
       validateProduct: (p) => {
@@ -112,14 +165,12 @@
         } else { 
           if (!p.description) err.push("description"); 
         }
-        
         if (['FENETRE', 'BAIE_COULISSANTE', 'PORTE_ENTREE', 'PORTE_SERVICE'].includes(p.type)) {
           if (!p.matiere) err.push("matiere"); 
           if (!p.profil) err.push("profil"); 
           if (!p.couleur) err.push("couleur");
           if (p.couleur === 'AUTRE' && !p.couleurAutre) err.push("couleurAutre"); 
           if (p.profil === 'ISO' && !p.isoMm) err.push("isoMm");
-          
           if (['FENETRE', 'BAIE_COULISSANTE'].includes(p.type)) {
              const v = p.vitrageFlags || {};
              if (!Object.values(v).some(val => val === true)) err.push("vitrageFlags");
@@ -129,7 +180,6 @@
             if (p.tierce && !p.cotePassageMm) err.push("cotePassageMm"); 
           }
         }
-        
         if (p.type === 'VOLET_ROULANT') {
           if (!p.manoeuvre) err.push("manoeuvre"); 
           if ((p.manoeuvre === 'FILAIRE' || p.manoeuvre === 'RADIO') && !p.sortieCable && p.manoeuvre !== 'SOLAIRE') err.push("sortieCable");
@@ -139,7 +189,7 @@
       }
     };
 
-    /* --- 2. EXPORT --- */
+    // --- EXPORT ---
     const generateSVG = (d) => {
         if (!d || !d.lines || d.lines.length === 0) return '';
         let p = ''; d.lines.forEach(l => { if (l.length < 2) return; let s = `M ${l[0].x} ${l[0].y}`; for (let i = 1; i < l.length; i++) s += ` L ${l[i].x} ${l[i].y}`; p += `<path d="${s}" stroke="#2563EB" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`; });
@@ -147,30 +197,66 @@
     };
 
     const generateReportHTML = (c, products, date) => {
-      const styles = `body{font-family:'Helvetica',sans-serif;max-width:900px;margin:0 auto;padding:20px;color:#1e293b;background:#fff}h1{color:#2563EB;border-bottom:2px solid #2563EB;padding-bottom:10px;font-size:24px}.header-table{width:100%;border-collapse:collapse;margin-bottom:20px;background:#f8fafc;border:1px solid #e2e8f0}.header-table td{padding:12px;vertical-align:top;width:50%}.header-label{font-weight:bold;color:#64748b;font-size:0.9em;text-transform:uppercase}.header-value{font-size:1.1em;color:#0f172a;margin-bottom:8px}.stats-bar{display:flex;gap:15px;margin-bottom:30px}.stat-item{flex:1;background:#eff6ff;padding:10px;border:1px solid #dbeafe;border-radius:6px;text-align:center}.product-block{border:2px solid #cbd5e1;margin-bottom:25px;page-break-inside:avoid;border-radius:8px;overflow:hidden}.product-header{background:#f1f5f9;padding:10px 15px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #cbd5e1;font-weight:bold;font-size:1.1em}.grid-layout{display:grid;grid-template-columns:2fr 1fr;gap:0}.specs-col{padding:15px;border-right:1px solid #e2e8f0}.visual-col{padding:15px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:#fcfcfc;gap:10px}.tech-table{width:100%;border-collapse:collapse;font-size:0.95em}.tech-table td{padding:4px 0;vertical-align:top}.tech-label{width:160px;color:#64748b;font-weight:600}.tech-val{color:#0f172a;font-weight:500}.tech-val.alert{color:#d97706}.drawing-box{border:1px dashed #cbd5e1;width:100%;height:180px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:10px}.photo-thumb{width:100%;height:100px;object-fit:cover;border:1px solid #ccc;border-radius:4px}.final-stamp{text-align:right;font-size:0.8em;color:#94a3b8;margin-top:50px;border-top:1px solid #eee;padding-top:10px}@media print{.no-print{display:none}button{display:none}body{padding:0}}`;
+      const styles = `
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; max-width: 1000px; margin: 0 auto; color: #1e293b; line-height: 1.4; }
+        .header { display: flex; justify-content: space-between; border-bottom: 3px solid #2563EB; padding-bottom: 20px; margin-bottom: 30px; }
+        .client-box { background: #f8fafc; padding: 20px; border-radius: 8px; flex: 1; margin-right: 20px; border: 1px solid #e2e8f0; }
+        .meta-box { flex: 0 0 300px; text-align: right; }
+        .stat-badge { display: inline-block; padding: 5px 12px; border-radius: 20px; font-weight: bold; font-size: 0.9em; margin-bottom: 5px; }
+        .product-card { border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 20px; overflow: hidden; page-break-inside: avoid; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .product-header { background: #f1f5f9; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #334155; }
+        .product-body { display: grid; grid-template-columns: 60% 40%; }
+        .specs { padding: 15px; font-size: 0.9em; }
+        .visuals { padding: 15px; background: #fcfcfc; border-left: 1px solid #e2e8f0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        table.spec-table { width: 100%; border-collapse: collapse; }
+        table.spec-table td { padding: 4px 0; vertical-align: top; }
+        .label { color: #64748b; font-weight: 600; width: 140px; }
+        .value { color: #0f172a; font-weight: 500; }
+        .drawing-container { border: 1px dashed #cbd5e1; width: 100%; height: 160px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; border-radius: 4px; }
+        .photo-row { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; }
+        .photo-img { width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; }
+        .alert-text { color: #d97706; font-weight: bold; }
+        .notes-box { margin-top: 10px; padding: 10px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 4px; color: #92400e; font-style: italic; }
+      `;
       
-      let h = `<html><head><meta charset="utf-8"><title>Relevé ${c.client}</title><style>${styles}</style></head><body><div class="no-print" style="margin-bottom:20px;text-align:right;"><button onclick="window.print()" style="background:#2563EB;color:white;padding:10px 20px;border:none;border-radius:6px;cursor:pointer;">Imprimer / PDF</button></div><h1>SARANGE - Fiche métrage</h1><table class="header-table"><tr><td><div class="header-label">Client</div><div class="header-value">${c.client}</div><div class="header-label">Adresse</div><div class="header-value">${c.adresse}</div><div class="header-label">Contacts</div><div class="header-value">Tél: ${c.telephone} ${c.email?`<br>Email: ${c.email}`:''}</div></td><td><div class="header-label">Contrat</div><div class="header-value" style="color:${c.typeContrat==='FOURNITURE_ET_POSE'?'#16a34a':'#2563EB'}">${c.typeContrat==='FOURNITURE_ET_POSE'?'✅ FOURNITURE ET POSE':'📦 FOURNITURE SEULE'}</div><div class="header-label">Date Relevé</div><div class="header-value">${new Date(c.date).toLocaleDateString()}</div></td></tr></table><div class="stats-bar"><div class="stat-item"><strong>${products.reduce((a,b)=>a+(b.quantity||1),0)}</strong> Produits</div><div class="stat-item"><strong>${products.filter(p=>!!p.dessin?.lines.length).length}</strong> Dessins</div><div class="stat-item" style="color:#d97706"><strong>${products.filter(p=>ValidationService.isMeasureSuspicious(p.largeurMm,p.monobloc)).length}</strong> Cotes Suspectes</div></div><h3>Détails Techniques (Atelier)</h3>`;
+      let h = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relevé ${c.client}</title><style>${styles}</style></head>
+        <body onload="window.print()">
+          <div class="header">
+            <div class="client-box">
+              <h1 style="margin:0 0 10px 0; color:#2563EB;">${c.client}</h1>
+              <div>📍 ${c.adresse}</div>
+              <div>📞 ${c.telephone} ${c.email ? ` • ✉️ ${c.email}` : ''}</div>
+            </div>
+            <div class="meta-box">
+              <div class="stat-badge" style="background:${c.typeContrat === 'FOURNITURE_ET_POSE' ? '#dcfce7;color:#166534' : '#dbeafe;color:#1e40af'}">
+                ${c.typeContrat === 'FOURNITURE_ET_POSE' ? 'FOURNITURE ET POSE' : 'FOURNITURE SEULE'}
+              </div><br>
+              <strong>Date:</strong> ${new Date(c.date).toLocaleDateString()}<br>
+              <strong>Produits:</strong> ${products.reduce((a, b) => a + (b.quantity || 1), 0)}<br>
+            </div>
+          </div>`;
 
       products.forEach(p => {
         let r = '';
-        const add = (l, v) => { if(v!==undefined&&v!==null&&v!==false&&v!=='') r+=`<tr><td class="tech-label">${l}</td><td class="tech-val">${v===true?'OUI':v}</td></tr>`; };
+        const add = (l, v) => { if(v!==undefined&&v!==null&&v!==false&&v!=='') r+=`<tr><td class="label">${l}</td><td class="value">${v===true?'OUI':v}</td></tr>`; };
+        
         if(p.room) add('Localisation', `<strong>${p.room}</strong>`);
         add('Quantité', `<strong>x ${p.quantity||1}</strong>`);
         
         let dim = `<strong>L ${p.largeurMm} x H ${p.hauteurMm} mm</strong>`;
-        if(p.monobloc && p.coffreADeduireMm && p.hauteurMm) dim += `<br><span style="font-size:0.85em;color:#64748b">Hauteur Totale ${p.hauteurMm} - Coffre ${p.coffreADeduireMm} = <strong>${p.hauteurMm - p.coffreADeduireMm} mm</strong> (Passage)</span>`;
+        if(p.monobloc && p.coffreADeduireMm && p.hauteurMm) dim += `<br><span style="font-size:0.9em;color:#64748b">Passage = <strong>${p.hauteurMm - p.coffreADeduireMm} mm</strong> (Coffre ${p.coffreADeduireMm})</span>`;
         add('Dimensions', dim);
 
-        if(ValidationService.isMeasureSuspicious(p.largeurMm, p.monobloc)||ValidationService.isMeasureSuspicious(p.hauteurMm, p.monobloc)) r+=`<tr><td class="tech-label">⚠️ ALERTE</td><td class="tech-val alert">COTE < 100mm</td></tr>`;
-        
+        if(ValidationService.isMeasureSuspicious(p.largeurMm, p.monobloc)||ValidationService.isMeasureSuspicious(p.hauteurMm, p.monobloc)) r+=`<tr><td class="label">⚠️ Attention</td><td class="value alert-text">Cote < 150mm</td></tr>`;
+
         if(['FENETRE','BAIE_COULISSANTE','PORTE_ENTREE','PORTE_SERVICE'].includes(p.type)) {
           add('Matière',p.matiere); add('Profil',`${p.profil} ${p.profil==='ISO'?`(${p.isoMm}mm)`:''}`); add('Couleur',`${p.couleur} ${p.couleurAutre||''}`);
           if(p.vitrageFlags) { const v=p.vitrageFlags; let va=[]; if(v.standard)va.push('4/20/4'); if(v.g200)va.push('G200'); if(v.feuillete1f)va.push('SP10 (1F)'); if(v.feuillete2f)va.push('SP10 (2F)'); if(va.length)add('Vitrage',va.join(', ')); }
           
           if(p.type==='FENETRE'){ 
-              add('Oscillo',p.oscilloBattant); 
+              add('Oscillo-Battant',p.oscilloBattant); 
               add('Grille Vent.',p.grilleVentilation); 
-              // LOGIQUE POIGNEE STRICTE
               if(p.poigneeHauteur === 'AUTRE' && p.poigneeHauteurMm) add('Hauteur Poignée', `${p.poigneeHauteurMm} mm`);
               add('Serrure Clé',p.serrureCle); add('Ouv. Ext.',p.ouvertureExterieure); 
           }
@@ -189,373 +275,448 @@
             if(p.coupleMoteur) add('Couple',`${p.coupleMoteur}Nm`);
             if(p.pose) add('Pose',p.pose);
             if(p.monobloc)add('Monobloc',`OUI (Coffre: ${p.coffreADeduireMm}mm)`); 
-            if(p.lieAProduitId)add('Lié au ID',`#${products.find(x=>x.id===p.lieAProduitId)?.index}`); 
+            if(p.lieAProduitId)add('Lié à',`#${products.find(x=>x.id===p.lieAProduitId)?.index || '?'}`); 
         }
-        if(p.type==='AUTRE') add('Desc.',p.description);
-        if(p.notes) r+=`<tr><td class="tech-label">Notes</td><td class="tech-val" style="font-style:italic;background:#fffbe0;">${p.notes}</td></tr>`;
+        if(p.type==='AUTRE') add('Description',p.description);
 
-        let imgs = ''; if(p.photos && p.photos.length > 0) imgs = `<div class="photo-grid">${p.photos.map(src=>`<img src="${src}" class="photo-thumb"/>`).join('')}</div>`;
-        let drawing = p.dessin && p.dessin.lines.length > 0 ? `<div class="drawing-box">${generateSVG(p.dessin)}</div>` : '';
+        const drawing = p.dessin && p.dessin.lines.length > 0 ? `<div class="drawing-container">${generateSVG(p.dessin)}</div>` : '';
+        const imgs = p.photos && p.photos.length > 0 ? `<div class="photo-row">${p.photos.map(src=>`<img src="${src}" class="photo-img"/>`).join('')}</div>` : '';
+        const notes = p.notes ? `<div class="notes-box">Note: ${p.notes}</div>` : '';
 
-        h += `<div class="product-block" style="${!p.isValid?'border-color:#dc2626':''}"><div class="product-header"><span>#${String(p.index).padStart(2,'0')} - ${p.type} ${p.quantity>1?`(x${p.quantity})`:''}</span>${!p.isValid?'<span style="color:red;font-size:0.8em">⚠ INCOMPLET</span>':''}</div><div class="grid-layout"><div class="specs-col"><table class="tech-table">${r}</table></div><div class="visual-col">${drawing}${imgs}</div></div></div>`;
+        h += `<div class="product-card" style="${!p.isValid ? 'border-color:#ef4444; border-width:2px;' : ''}">
+            <div class="product-header">
+              <span>#${String(p.index).padStart(2,'0')} - ${p.type}</span>
+              ${!p.isValid ? '<span style="color:#ef4444">⚠️ INCOMPLET</span>' : ''}
+            </div>
+            <div class="product-body">
+              <div class="specs"><table class="spec-table">${r}</table>${notes}</div>
+              <div class="visuals">${drawing}${imgs}</div>
+            </div></div>`;
       });
-      h += `<div class="final-stamp">Dossier finalisé le ${new Date(date).toLocaleString('fr-FR')}</div></body></html>`;
+      h += `</body></html>`;
       return h;
     };
 
-    /* --- 3. UI COMPONENTS --- */
-    const Card = ({ children, className = "" }) => <div className={`bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden ${className}`}>{children}</div>;
-    const Button = ({ onClick, variant = 'primary', children, icon: Icon, disabled = false, className = '' }) => {
-      const vars = { primary: "bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300", secondary: "bg-slate-100 text-slate-700 hover:bg-slate-200", whatsapp: "bg-green-500 text-white hover:bg-green-600 shadow-md", dark: "bg-slate-700 text-white hover:bg-slate-800", danger: "bg-red-50 text-red-600 hover:bg-red-100" };
-      return <button onClick={onClick} disabled={disabled} className={`flex items-center justify-center px-4 py-3 rounded-lg font-medium transition-all active:scale-95 touch-manipulation ${vars[variant]} ${className}`}>{Icon && <Icon size={20} className="mr-2" />}{children}</button>;
+    // --- COMPONENTS ---
+    const Button = ({ onClick, variant = 'primary', children, icon: Icon, disabled = false, className = '', type="button" }) => {
+      const vars = {
+        primary: "bg-brand-600 text-white hover:bg-brand-700 disabled:bg-brand-300 shadow-md shadow-brand-500/20",
+        secondary: "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700",
+        danger: "bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 dark:bg-red-900/20 dark:border-red-900/30",
+        ghost: "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+      };
+      return (
+        <button type={type} onClick={onClick} disabled={disabled} className={`flex items-center justify-center px-4 py-3 rounded-lg font-medium transition-all active:scale-95 ${vars[variant]} ${className}`}>
+          {Icon && <Icon size={18} className="mr-2" />}
+          {children}
+        </button>
+      );
     };
-    const SectionTitle = ({ title }) => <h3 className="text-sm uppercase tracking-wider text-slate-500 font-bold mb-3 mt-6 border-b pb-1">{title}</h3>;
-    
-    // NumericInput avec ID pour scroll et gestion erreur visuelle
-    const NumericInput = ({ label, value, onChange, suffix = "mm", id, hasError, monobloc=false }) => {
-      const susp = ValidationService.isMeasureSuspicious(value, monobloc);
-      return <div className="flex flex-col mb-4" id={id}><label className={`text-sm font-medium mb-1 ${hasError ? 'text-red-600' : 'text-slate-700'}`}>{label} {hasError && '*'}</label><div className="relative"><input type="number" inputMode="numeric" pattern="[0-9]*" value={value || ''} onChange={(e) => onChange(e.target.value ? parseInt(e.target.value) : undefined)} className={`w-full p-3 text-lg border-2 rounded-lg outline-none transition-colors ${hasError ? 'border-red-500 bg-red-50' : susp ? 'border-amber-300 bg-amber-50' : 'border-slate-200 focus:border-blue-500'}`} placeholder="0" /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">{suffix}</span></div>{susp && <div className="flex items-center text-amber-600 text-xs mt-1"><AlertTriangle size={12} className="mr-1" /> Attention &lt; 100{suffix}</div>}</div>;
-    };
-    const ToggleGroup = ({ label, options, value, onChange, id, hasError }) => (
-      <div className="mb-4" id={id}><label className={`text-sm font-medium mb-2 block ${hasError ? 'text-red-600' : 'text-slate-700'}`}>{label} {hasError && '*'}</label><div className="flex flex-wrap gap-2">{options.map((opt) => <button key={opt.value} onClick={() => onChange(opt.value)} className={`px-4 py-2 rounded-md font-medium text-sm border transition-colors ${value === opt.value ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-600 border-slate-200'}`}>{opt.label}</button>)}</div></div>
+
+    const Input = ({ label, value, onChange, placeholder, type="text", error }) => (
+      <div className="mb-4">
+        {label && <label className="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">{label}</label>}
+        <input type={type} value={value||''} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`w-full p-3 rounded-lg bg-white dark:bg-slate-900 border ${error ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500'} outline-none transition-all dark:text-white`}/>
+        {error && <span className="text-xs text-red-500 mt-1">{error}</span>}
+      </div>
     );
-    const BooleanToggle = ({ label, value, onChange, note, disabled, id, hasError }) => (
-      <div className={`flex items-center justify-between py-3 border-b border-slate-100 last:border-0 ${disabled ? 'opacity-50' : ''}`}><div><div className={`font-medium ${hasError ? 'text-red-600' : 'text-slate-700'}`}>{label}</div>{note && <div className="text-xs text-slate-400">{note}</div>}</div><button onClick={() => !disabled && onChange(!value)} className={`relative w-14 h-8 rounded-full transition-colors ${value ? 'bg-green-500' : 'bg-slate-200'}`}><div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${value ? 'translate-x-6' : 'translate-x-0'}`} /></button></div>
+
+    const SelectToggle = ({ options, value, onChange, label }) => (
+      <div className="mb-4">
+        <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">{label}</label>
+        <div className="flex flex-wrap gap-2">
+          {options.map(opt => {
+            const isActive = value === opt.value;
+            return (
+              <button key={opt.value} onClick={() => onChange(opt.value)} className={`px-3 py-2 rounded-md text-sm font-medium border transition-all ${isActive ? 'bg-brand-600 text-white border-brand-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'}`}>{opt.label}</button>
+            )
+          })}
+        </div>
+      </div>
     );
-    const AddressAutocomplete = ({ value, onChange }) => {
-      const [sug, setSug] = useState([]); const [open, setOpen] = useState(false); const ref = useRef(null);
-      useEffect(() => { const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
-      const handle = async (e) => { const v = e.target.value; onChange(v); if (v.length > 3) { try { const r = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(v)}&limit=5`); if(r.ok){ const d = await r.json(); setSug(d.features||[]); setOpen(true); } } catch (err) {} } else setOpen(false); };
+
+    const AddressInput = ({ value, onChange }) => {
+      const [sug, setSug] = useState([]); 
+      const [open, setOpen] = useState(false); 
+      const ref = useRef(null);
+      const debouncer = useRef(null);
+      useEffect(() => { 
+        const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }; 
+        document.addEventListener("mousedown", h); 
+        return () => document.removeEventListener("mousedown", h); 
+      }, []);
+      const fetchAddress = async (q) => {
+        try { const r = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=5`); if(r.ok){ const d = await r.json(); setSug(d.features||[]); setOpen(true); } } catch (err) {}
+      };
+      const handle = (e) => { 
+        const v = e.target.value; onChange(v); 
+        if(debouncer.current) clearTimeout(debouncer.current);
+        if (v.length > 3) { debouncer.current = setTimeout(() => fetchAddress(v), 300); } else setOpen(false); 
+      };
       const geo = () => { if(navigator.geolocation) navigator.geolocation.getCurrentPosition(async p => { try { const r = await fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${p.coords.longitude}&lat=${p.coords.latitude}`); const d = await r.json(); if(d.features?.length) onChange(d.features[0].properties.label); } catch(e){} }); };
-      return <div className="relative w-full mb-3" ref={ref}><div className="relative"><input className="w-full p-2 pl-10 border rounded outline-none focus:border-blue-500" placeholder="Adresse (Recherche auto...)" value={value} onChange={handle}/><MapPin size={18} className="absolute left-3 top-3 text-slate-400"/><button onClick={geo} className="absolute right-2 top-2 text-blue-500"><MapPin size={20}/></button></div>{open && sug.length > 0 && <ul className="suggestions-list">{sug.map(s => <li key={s.properties.id} onClick={() => { onChange(s.properties.label); setOpen(false); }} className="p-3 border-b hover:bg-blue-50 cursor-pointer text-sm flex flex-col"><span className="font-medium">{s.properties.name}</span><span className="text-xs text-slate-500">{s.properties.postcode} {s.properties.city}</span></li>)}</ul>}</div>;
+
+      return (
+        <div className="relative mb-4" ref={ref}>
+          <label className="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">Adresse du chantier</label>
+          <div className="relative">
+            <input className="w-full p-3 pl-10 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-brand-500 dark:bg-slate-900 dark:text-white transition-colors" placeholder="Entrez l'adresse..." value={value} onChange={handle}/>
+            <MapPin size={18} className="absolute left-3 top-3.5 text-slate-400"/>
+            <button onClick={geo} className="absolute right-2 top-2 p-1.5 text-brand-600 hover:bg-brand-50 rounded"><MapPin size={18}/></button>
+          </div>
+          {open && sug.length > 0 && (<ul className="suggestions-list">{sug.map(s => (<li key={s.properties.id} onClick={() => { onChange(s.properties.label); setOpen(false); }} className="p-3 border-b dark:border-slate-700 hover:bg-brand-50 dark:hover:bg-slate-800 cursor-pointer flex flex-col group"><span className="font-medium text-sm text-slate-800 dark:text-slate-200 group-hover:text-brand-700">{s.properties.name}</span><span className="text-xs text-slate-500">{s.properties.postcode} {s.properties.city}</span></li>))}</ul>)}
+        </div>
+      );
     };
+
     const DrawingCanvas = ({ data, onChange }) => {
-      const ref = useRef(null); const [lines, setLines] = useState(data?.lines || []); const [draw, setDraw] = useState(false);
-      useEffect(() => { const ctx = ref.current?.getContext('2d'); if(!ctx)return; ctx.clearRect(0,0,350,250); ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth=3; ctx.strokeStyle='#2563EB'; lines.forEach(l=>{ if(l.length<1)return; ctx.beginPath(); ctx.moveTo(l[0].x, l[0].y); for(let i=1;i<l.length;i++)ctx.lineTo(l[i].x,l[i].y); ctx.stroke(); }); onChange({lines,width:350,height:250}); }, [lines]);
+      const ref = useRef(null); 
+      const [lines, setLines] = useState(data?.lines || []); 
+      const [isDrawing, setIsDrawing] = useState(false);
+      useEffect(() => { 
+        const ctx = ref.current?.getContext('2d'); if(!ctx)return; 
+        ctx.clearRect(0,0,350,250); ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth=3; ctx.strokeStyle='#2563EB'; 
+        ctx.save(); ctx.strokeStyle='#e2e8f0'; ctx.lineWidth=1; ctx.beginPath();
+        for(let x=0;x<=350;x+=25){ctx.moveTo(x,0);ctx.lineTo(x,250);} for(let y=0;y<=250;y+=25){ctx.moveTo(0,y);ctx.lineTo(350,y);}
+        ctx.stroke(); ctx.restore();
+        lines.forEach(l=>{ if(l.length<1)return; ctx.beginPath(); ctx.moveTo(l[0].x, l[0].y); for(let i=1;i<l.length;i++)ctx.lineTo(l[i].x,l[i].y); ctx.stroke(); }); 
+        onChange({lines,width:350,height:250}); 
+      }, [lines]);
       const getPos = e => { const r = ref.current.getBoundingClientRect(); const t = e.touches ? e.touches[0] : e; return { x: t.clientX - r.left, y: t.clientY - r.top }; };
-      const start = e => { if(e.cancelable)e.preventDefault(); setDraw(true); setLines(p => [...p, [getPos(e)]]); };
-      const move = e => { if(!draw)return; if(e.cancelable)e.preventDefault(); const p = getPos(e); setLines(prev => { const n = [...prev]; n[n.length - 1] = [...n[n.length - 1], p]; return n; }); };
-      return <div className="bg-white border rounded-lg p-2"><div className="flex justify-between mb-2 text-sm text-slate-500"><span className="flex items-center"><PenTool size={16} className="mr-1"/> Dessin</span><div><button onClick={()=>setLines(p=>p.slice(0,-1))} className="mr-2">Annuler</button><button onClick={()=>confirm("Effacer?")&&setLines([])} className="text-red-600">Tout Effacer</button></div></div><canvas ref={ref} width={350} height={250} className="w-full h-64 bg-slate-50 border border-dashed border-slate-300 rounded touch-none" onMouseDown={start} onMouseMove={move} onMouseUp={()=>setDraw(false)} onMouseLeave={()=>setDraw(false)} onTouchStart={start} onTouchMove={move} onTouchEnd={()=>setDraw(false)}/></div>;
-    };
-
-    /* --- 4. APP LOGIC --- */
-    const AppContext = createContext(null);
-    const useAppStore = () => useContext(AppContext);
-
-    const ProductEditor = ({ product: initial, onSave, onCancel }) => {
-      const [p, setP] = useState(initial); const [adv, setAdv] = useState(false); 
-      const [errors, setErrors] = useState([]);
-      const fileRef = useRef(null);
-      const { state } = useAppStore();
-      const products = state.products;
-
-      // Auto-scroll vers l'erreur
-      useEffect(() => {
-        if(errors.length > 0) {
-          const el = document.getElementById(`field-${errors[0]}`);
-          if(el) el.scrollIntoView({behavior: 'smooth', block: 'center'});
-        }
-      }, [errors]);
-
-      // Logic métier
-      useEffect(() => {
-        if (p.type === 'FENETRE' && p.hauteurMm > 2000) setP(x => ({...x, oscilloBattant: false}));
-        if (p.type === 'PORTE_ENTREE' && p.largeurMm <= 1000) setP(x => ({...x, tierce: false, cotePassageMm: undefined}));
-      }, [p.hauteurMm, p.largeurMm, p.type]);
-
-      const update = (f, v) => setP(pr => ({ ...pr, [f]: v }));
-      const updateN = (pa, f, v) => setP(pr => ({ ...pr, [pa]: { ...(pr[pa] || {}), [f]: v } }));
-      
-      const handleSave = () => {
-        const val = ValidationService.validateProduct(p);
-        if(!val.isValid) { setErrors(val.errors); return; }
-        onSave({...p, isValid: true, validationErrors: []});
-      };
-
-      const handlePhoto = async (e) => {
-        const file = e.target.files[0];
-        if(file) {
-          const compressed = await compressImage(file);
-          setP(prev => ({...prev, photos: [...(prev.photos||[]), compressed]}));
-        }
-      };
-
-      const isErr = (f) => errors.includes(f);
-      const colOpts = p.matiere==='PVC'?[{label:'Blanc',value:'BLANC'},{label:'Bicolor',value:'BICOLOR_7016'},{label:'Autre',value:'AUTRE'}]:[{label:'Blanc',value:'BLANC'},{label:'Gris 7016',value:'GRIS_7016'},{label:'Autre',value:'AUTRE'}];
+      const start = e => { if(e.cancelable) e.preventDefault(); setIsDrawing(true); setLines(p => [...p, [getPos(e)]]); };
+      const move = e => { if(!isDrawing) return; if(e.cancelable) e.preventDefault(); const p = getPos(e); setLines(prev => { const n = [...prev]; n[n.length - 1] = [...n[n.length - 1], p]; return n; }); };
 
       return (
-        <div className="flex flex-col h-full bg-slate-50 fixed inset-0 z-50">
-          <div className="bg-white px-4 py-3 border-b flex justify-between items-center sticky top-0 z-10 shadow-sm">
-            <button onClick={onCancel} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full"><X size={24}/></button>
-            <h2 className="font-bold text-lg text-slate-800">Produit #{String(p.index).padStart(2,'0')}</h2>
-            <button onClick={handleSave} className="flex items-center px-4 py-2 rounded-full font-medium bg-blue-600 text-white hover:bg-blue-700"><Save size={18} className="mr-2"/> OK</button>
-          </div>
-          {errors.length > 0 && <div className="bg-red-100 px-4 py-2 text-xs text-red-800 font-medium text-center">Champs manquants : {errors.join(', ')}</div>}
-          
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-20">
-            <Card className="p-4">
-              <ToggleGroup label="Type" options={[{label:'Fenêtre',value:'FENETRE'},{label:'Baie',value:'BAIE_COULISSANTE'},{label:'Porte Ent.',value:'PORTE_ENTREE'},{label:'Porte Service',value:'PORTE_SERVICE'},{label:'Volet',value:'VOLET_ROULANT'},{label:'Autre',value:'AUTRE'}]} value={p.type} onChange={v=>update('type',v)}/>
-              
-              {/* QUANTITE */}
-              <div className="flex justify-between items-center mb-4 bg-slate-100 p-3 rounded-lg">
-                <span className="font-medium">Quantité</span>
-                <div className="flex items-center bg-white rounded-lg border">
-                  <button className="p-2 text-xl px-4 text-blue-600" onClick={()=>update('quantity', Math.max(1, (p.quantity||1)-1))}>-</button>
-                  <span className="font-bold w-8 text-center">{p.quantity||1}</span>
-                  <button className="p-2 text-xl px-4 text-blue-600" onClick={()=>update('quantity', (p.quantity||1)+1)}>+</button>
-                </div>
-              </div>
-
-              {p.type==='AUTRE'&&<div className="mb-3" id="field-description"><label className="text-sm font-medium">Description</label><textarea className={`w-full p-2 border rounded ${isErr('description')?'border-red-500':''}`} value={p.description||''} onChange={e=>update('description',e.target.value)}/></div>}
-              <div className="grid grid-cols-2 gap-4">
-                <NumericInput id="field-largeurMm" hasError={isErr('largeurMm')} label="Largeur" value={p.largeurMm} onChange={v=>update('largeurMm',v)}/>
-                <NumericInput id="field-hauteurMm" hasError={isErr('hauteurMm')} label="Hauteur" value={p.hauteurMm} onChange={v=>update('hauteurMm',v)} monobloc={p.monobloc}/>
-              </div>
-            </Card>
-
-            {['FENETRE','BAIE_COULISSANTE','PORTE_ENTREE','PORTE_SERVICE'].includes(p.type)&&<Card className="p-4">
-              <h3 className="text-sm font-bold text-slate-500 mb-3 uppercase">Matière & Esthétique</h3>
-              <ToggleGroup id="field-matiere" hasError={isErr('matiere')} label="Matière" options={[{label:'PVC',value:'PVC'},{label:'Alu',value:'ALU'}]} value={p.matiere} onChange={v=>update('matiere',v)}/>
-              {p.matiere&&<ToggleGroup id="field-profil" hasError={isErr('profil')} label="Profil" options={p.matiere==='PVC'?[{label:'Neuf',value:'NEUF'},{label:'Rénov 40',value:'RENO_40'},{label:'Rénov 60',value:'RENO_60'},{label:'ISO',value:'ISO'}]:[{label:'Neuf',value:'NEUF'},{label:'Rénov',value:'RENO'}]} value={p.profil} onChange={v=>update('profil',v)}/>}
-              {p.profil==='ISO'&&<NumericInput id="field-isoMm" hasError={isErr('isoMm')} label="Aile ISO" value={p.isoMm} onChange={v=>update('isoMm',v)}/>} 
-              <div className="border-t pt-3">
-                <ToggleGroup id="field-couleur" hasError={isErr('couleur')} label="Couleur" options={colOpts} value={p.couleur} onChange={v=>update('couleur',v)}/>
-                {p.couleur==='AUTRE'&&<input id="field-couleurAutre" className={`w-full p-2 border rounded ${isErr('couleurAutre')?'border-red-500':''}`} placeholder="Préciser..." value={p.couleurAutre||''} onChange={e=>update('couleurAutre',e.target.value)}/>}
-              </div>
-            </Card>}
-
-            {(p.type==='FENETRE'||p.type==='BAIE_COULISSANTE')&&<Card className="p-4">
-              <h3 id="field-vitrageFlags" className={`text-sm font-bold mb-3 uppercase ${isErr('vitrageFlags')?'text-red-500':'text-slate-500'}`}>Vitrage (Au moins 1 requis)</h3>
-              <div className={`grid grid-cols-2 gap-2 mb-3 p-2 rounded ${isErr('vitrageFlags')?'bg-red-50 border border-red-200':''}`}>
-                {['standard','g200','feuillete1f','feuillete2f'].map(k=><label key={k} className="flex items-center space-x-2 p-2 border rounded text-sm"><input type="checkbox" checked={p.vitrageFlags?.[k]||false} onChange={e=>updateN('vitrageFlags',k,e.target.checked)}/><span>{k}</span></label>)}
-              </div>
-              {p.type==='FENETRE'&&<><BooleanToggle label="Oscillo-Battant" value={p.oscilloBattant} onChange={v=>update('oscilloBattant',v)} disabled={p.hauteurMm>2000} note={p.hauteurMm>2000?"Max 2000mm":""}/><BooleanToggle label="Grille Ventil" value={p.grilleVentilation} onChange={v=>update('grilleVentilation',v)}/><div className="mt-3"><label className="text-sm font-medium">Hauteur Poignée</label><div className="flex space-x-3 mt-1"><label><input type="radio" checked={p.poigneeHauteur!=='AUTRE'} onChange={()=>update('poigneeHauteur','CENTREE')}/> Centrée</label><label><input type="radio" checked={p.poigneeHauteur==='AUTRE'} onChange={()=>update('poigneeHauteur','AUTRE')}/> Autre</label></div>{p.poigneeHauteur==='AUTRE'&&<input type="number" className="mt-2 p-2 border rounded w-32" placeholder="mm" value={p.poigneeHauteurMm||''} onChange={e=>update('poigneeHauteurMm',parseInt(e.target.value))}/>}</div></>}
-            </Card>}
-
-            {p.type==='PORTE_ENTREE'&&<Card className="p-4">
-              <ToggleGroup id="field-remplissage" hasError={isErr('remplissage')} label="Remplissage" options={[{label:'Panneau Déco Alu',value:'PANNEAU_DECORATIF_ALU'},{label:'Sandwich',value:'PANNEAU_SANDWICH'},{label:'Vitrée',value:'VITREE'}]} value={p.remplissage} onChange={v=>update('remplissage',v)}/>
-              {p.largeurMm>1000&&<div className="mt-3 border-t pt-3"><BooleanToggle label="Tierce ?" value={p.tierce} onChange={v=>update('tierce',v)}/>{p.tierce&&<NumericInput id="field-cotePassageMm" hasError={isErr('cotePassageMm')} label="Cote Passage" value={p.cotePassageMm} onChange={v=>update('cotePassageMm',v)}/>}</div>}
-            </Card>}
-
-            {p.type==='VOLET_ROULANT'&&<Card className="p-4">
-              <div className="mb-4 bg-slate-100 p-3 rounded">
-                  <label className="block text-sm font-medium mb-1">Lier à une menuiserie</label>
-                  <select className="w-full p-2 border rounded" value={p.lieAProduitId || ''} onChange={e => update('lieAProduitId', e.target.value)}>
-                    <option value="">-- Indépendant --</option>
-                    {products.filter(prod => prod.id !== p.id && ['FENETRE', 'BAIE_COULISSANTE'].includes(prod.type)).map(prod => (
-                      <option key={prod.id} value={prod.id}>#{prod.index} {prod.type} {prod.largeurMm}x{prod.hauteurMm}</option>
-                    ))}
-                  </select>
-              </div>
-              <ToggleGroup id="field-manoeuvre" hasError={isErr('manoeuvre')} label="Manoeuvre" options={[{label:'Filaire',value:'FILAIRE'},{label:'Radio',value:'RADIO'},{label:'Solaire',value:'SOLAIRE'}]} value={p.manoeuvre} onChange={v=>update('manoeuvre',v)}/>
-              {p.manoeuvre!=='SOLAIRE'&&<ToggleGroup id="field-sortieCable" hasError={isErr('sortieCable')} label="Câble" options={[{label:'Gauche',value:'GAUCHE'},{label:'Droite',value:'DROITE'}]} value={p.sortieCable} onChange={v=>update('sortieCable',v)}/>}
-              {p.manoeuvre!=='FILAIRE' && <BooleanToggle label="Box Domotique" value={p.boxDomotique} onChange={v=>update('boxDomotique',v)}/>}
-              <div className="mt-3 pt-3 border-t">
-                <BooleanToggle label="Monobloc ?" value={p.monobloc} onChange={v=>update('monobloc',v)}/>{p.monobloc&&<div id="field-coffreADeduireMm"><NumericInput id="field-coffreADeduireMm" hasError={isErr('coffreADeduireMm')} label="Hauteur Coffre" value={p.coffreADeduireMm} onChange={v=>update('coffreADeduireMm',v)}/><div className="text-right text-sm font-bold text-blue-600">Passage: {p.hauteurMm && p.coffreADeduireMm ? p.hauteurMm - p.coffreADeduireMm : '-'} mm</div></div>}
-              </div>
-            </Card>}
-
-            {ValidationService.hasAdvancedOptions(p.type)&&<div className="border border-slate-200 rounded-lg bg-white overflow-hidden"><button onClick={()=>setAdv(!adv)} className="w-full flex justify-between p-3 bg-slate-50 font-medium"><span>Options Avancées</span>{adv?<ChevronUp size={18}/>:<ChevronDown size={18}/>}</button>{adv&&<div className="p-4 space-y-3">
-                {(p.type.includes('PORTE')||p.type==='FENETRE')&&<><BooleanToggle label="Ouv. Extérieure" value={p.ouvertureExterieure} onChange={v=>update('ouvertureExterieure',v)}/><BooleanToggle label="Serrure Clé" value={p.serrureCle} onChange={v=>update('serrureCle',v)}/></>}
-                {p.type==='VOLET_ROULANT'&&<><ToggleGroup label="Couple" options={[{label:'10Nm',value:10},{label:'20Nm',value:20}]} value={p.coupleMoteur||10} onChange={v=>update('coupleMoteur',v)}/><ToggleGroup label="Pose" options={[{label:'Réno',value:'RENO'},{label:'Tradi',value:'TRADI'},{label:'Tunnel',value:'TUNNEL'}]} value={p.pose} onChange={v=>update('pose',v)}/></>}
-            </div>}</div>}
-
-            <Card className="p-4">
-              <h3 className="text-sm font-bold text-slate-500 mb-2 uppercase">Visuel & Notes</h3>
-              <DrawingCanvas data={p.dessin} onChange={d=>update('dessin',d)}/>
-              
-              <div className="mt-4">
-                <label className="text-sm font-medium mb-2 block">Photos</label>
-                <div className="photo-grid">
-                  {(p.photos||[]).map((src,i)=><div key={i} className="photo-thumb"><img src={src} className="w-full h-full object-cover"/><button className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-bl" onClick={()=>setP(pr=>({...pr,photos:pr.photos.filter((_,ix)=>ix!==i)}))}><X size={12}/></button></div>)}
-                  <button onClick={()=>fileRef.current.click()} className="h-20 border-2 border-dashed border-blue-300 rounded flex flex-col items-center justify-center text-blue-500 hover:bg-blue-50"><Camera size={24}/><span className="text-xs">Ajouter</span></button>
-                </div>
-                <input type="file" ref={fileRef} accept="image/*" capture="environment" className="hidden" onChange={handlePhoto}/>
-              </div>
-
-              <textarea className="w-full p-2 border rounded mt-2 h-20" placeholder="Notes (pose, accès...)" value={p.notes||''} onChange={e=>update('notes',e.target.value)}/>
-            </Card>
-          </div>
-        </div>
-      );
-    };
-
-    /* --- 5. DASHBOARD & CHANTIER LIST --- */
-    const Dashboard = ({ onNew }) => {
-      const { state, selectChantier } = useAppStore();
-      const stats = { total: state.chantiers.length, products: state.products.length, pending: state.chantiers.filter(c=>!c.dateFinalisation).length };
-      return (
-        <div className="p-4 max-w-7xl mx-auto">
-          <h1 className="text-2xl font-bold mb-6 text-slate-800 dark:text-white">Tableau de bord</h1>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm text-center border dark:border-slate-700"><div className="text-2xl font-bold text-blue-600">{stats.total}</div><div className="text-xs text-slate-500 dark:text-slate-400">Dossiers</div></div>
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm text-center border dark:border-slate-700"><div className="text-2xl font-bold text-amber-500">{stats.pending}</div><div className="text-xs text-slate-500 dark:text-slate-400">En cours</div></div>
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm text-center border dark:border-slate-700"><div className="text-2xl font-bold text-green-600">{stats.products}</div><div className="text-xs text-slate-500 dark:text-slate-400">Produits</div></div>
-          </div>
-          <button onClick={onNew} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold shadow-lg flex items-center justify-center mb-8 hover:bg-blue-700 active:scale-95 transition-all"><Plus size={24} className="mr-2"/> Nouveau Chantier</button>
-          <div className="space-y-4">
-            <h3 className="font-bold text-slate-600 dark:text-slate-400 uppercase text-xs">Récents</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {state.chantiers.slice(0,6).map(c=>(
-              <div key={c.id} onClick={()=>selectChantier(c.id)} className="bg-white dark:bg-slate-800 p-4 rounded-lg border dark:border-slate-700 shadow-sm flex justify-between items-center cursor-pointer hover:border-blue-400 transition-colors">
-                <div><div className="font-bold dark:text-white">{c.client}</div><div className="text-xs text-slate-500">{new Date(c.date).toLocaleDateString()}</div></div>
-                {c.dateFinalisation ? <CheckCircle size={20} className="text-green-500"/> : <Clock size={20} className="text-amber-500"/>}
-              </div>
-            ))}
+        <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
+          <div className="flex justify-between mb-2 text-xs text-slate-500 uppercase font-bold tracking-wide">
+            <span className="flex items-center"><PenTool size={14} className="mr-1"/> Croquis</span>
+            <div className="flex gap-2">
+              <button onClick={()=>setLines(p=>p.slice(0,-1))} className="hover:text-brand-600">Annuler</button>
+              <button onClick={()=>confirm("Effacer tout?")&&setLines([])} className="text-red-500 hover:text-red-700">Effacer</button>
             </div>
           </div>
+          <canvas ref={ref} width={350} height={250} className="w-full h-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded cursor-crosshair touch-none shadow-inner" onMouseDown={start} onMouseMove={move} onMouseUp={()=>setIsDrawing(false)} onMouseLeave={()=>setIsDrawing(false)} onTouchStart={start} onTouchMove={move} onTouchEnd={()=>setIsDrawing(false)}/>
         </div>
       );
     };
 
-    const ChantierDetail = () => {
-      const { state, selectChantier, saveProduct, deleteProduct, updateChantier } = useAppStore();
-      const chantier = state.chantiers.find(c => c.id === state.currentChantierId);
-      const products = state.products.filter(p => p.chantierId === chantier?.id).sort((a,b)=>a.index-b.index);
-      const [edit, setEdit] = useState(null); const [fin, setFin] = useState(false);
-
-      if(!chantier) return <div>Chargement...</div>;
-      if(edit) return <ProductEditor product={edit} onSave={p=>{saveProduct(p);setEdit(null);}} onCancel={()=>setEdit(null)}/>;
-
-      const borderColor = (type) => {
-        if(type.includes('FENETRE')||type.includes('BAIE')) return 'border-l-blue-500';
-        if(type.includes('PORTE')) return 'border-l-green-500';
-        if(type.includes('VOLET')) return 'border-l-orange-500';
-        return 'border-l-slate-300';
-      };
-
-      const duplicate = (p) => {
-        const newP = { ...p, id: generateUUID(), index: products.length + 1, dateCreation: new Date().toISOString() };
-        saveProduct(newP);
-      };
-
-      return (
-        <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-900">
-          <div className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 px-4 py-3 flex items-center shadow-sm sticky top-0 z-10">
-            <button onClick={()=>selectChantier(null)} className="mr-3 p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white"><ArrowLeft size={24}/></button>
-            <div className="flex-1 overflow-hidden"><h2 className="font-bold text-lg truncate dark:text-white">{chantier.client}</h2><div className="text-xs text-slate-500">{products.length} Produits • {chantier.typeContrat==='FOURNITURE_ET_POSE'?'Pose Incluse':'Fourniture Seule'}</div></div>
-            <button onClick={()=>setFin(true)} className="bg-blue-600 text-white px-3 py-2 rounded font-bold shadow text-sm">Finaliser</button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 max-w-7xl mx-auto w-full">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {products.map(p=>(
-              <div key={p.id} onClick={()=>setEdit(p)} className={`bg-white dark:bg-slate-800 p-4 rounded-lg border-l-4 shadow-sm flex justify-between cursor-pointer ${borderColor(p.type)} hover:shadow-md transition-shadow`}>
-                <div>
-                  <div className="font-bold text-slate-800 dark:text-white flex items-center">#{String(p.index).padStart(2,'0')} {p.type} {p.quantity>1 && <span className="ml-2 bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full">x{p.quantity}</span>}</div>
-                  <div className="text-sm text-slate-500">{p.largeurMm} x {p.hauteurMm} mm {p.room && `• ${p.room}`}</div>
-                  {!p.isValid && <div className="text-xs text-red-500 flex items-center mt-1"><AlertTriangle size={12} className="mr-1"/> Incomplet</div>}
-                </div>
-                <div className="flex flex-col gap-2 justify-center">
-                  <button onClick={(e)=>{e.stopPropagation();duplicate(p)}} className="text-slate-400 hover:text-blue-500 p-1" title="Dupliquer"><Copy size={18}/></button>
-                  <button onClick={(e)=>{e.stopPropagation();if(confirm('Supprimer?'))deleteProduct(p.id)}} className="text-slate-400 hover:text-red-500 p-1" title="Supprimer"><Trash2 size={18}/></button>
-                </div>
-              </div>
-            ))}
-            <button onClick={()=>setEdit({id:generateUUID(),chantierId:chantier.id,index:products.length+1,type:'FENETRE',quantity:1,dateCreation:new Date().toISOString(),photos:[],isValid:false,validationErrors:[]})} className="w-full py-4 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-slate-500 font-medium flex flex-col items-center hover:bg-blue-50 dark:hover:bg-slate-800 hover:border-blue-400 hover:text-blue-500 min-h-[100px] justify-center"><Plus size={32} className="mb-2 opacity-50"/> Ajouter Produit</button>
-            </div>
-          </div>
-          {fin && <FinalizeModal chantier={chantier} products={products} onClose={()=>setFin(false)} onUpdateChantier={updateChantier}/>}
-        </div>
-      );
-    };
-
-    const FinalizeModal = ({ chantier, products, onClose, onUpdateChantier }) => {
-      const inc = products.filter(p=>!p.isValid);
-      const [status, setStatus] = useState(null);
-      const prepare = () => {
-        const d = new Date(); onUpdateChantier(chantier.id, { dateFinalisation: d.toISOString() });
-        const html = generateReportHTML(chantier, products, d.toISOString());
-        const blob = new Blob([html], { type: 'text/html' });
-        const dd = String(d.getDate()).padStart(2,'0'); const mm = String(d.getMonth()+1).padStart(2,'0');
-        return { blob, name: `Metrage_${chantier.client.replace(/\s+/g,'_')}_${dd}-${mm}-${d.getFullYear()}.html` };
-      };
-      const dl = () => { const {blob,name}=prepare(); const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download=name; a.click(); setStatus('Téléchargé !'); };
-      const share = async () => { try { const {blob,name}=prepare(); const f=new File([blob],name,{type:'text/html'}); if(navigator.canShare && navigator.canShare({files:[f]})) { await navigator.share({files:[f],title:'Fiche Métrage',text:`Relevé ${chantier.client}`}); setStatus('Partagé !'); } else alert("Utilisez Télécharger."); } catch(e) {} };
-      return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl max-w-lg w-full p-6 text-slate-900 dark:text-white shadow-2xl">
-            <h2 className="text-xl font-bold mb-4 flex items-center"><CheckCircle className="mr-2 text-blue-600"/> Finalisation</h2>
-            {inc.length>0 ? <div className="bg-red-50 p-4 rounded text-red-700 mb-4 font-medium border border-red-200">⚠️ {inc.length} produits incomplets.</div> : <div className="bg-green-50 p-4 rounded text-green-700 mb-4 font-medium border border-green-200">✅ Tout est complet.</div>}
-            <div className="space-y-3">
-              <Button onClick={share} disabled={inc.length>0} variant="whatsapp" className="w-full">Partager (WhatsApp...)</Button>
-              <Button onClick={dl} disabled={inc.length>0} variant="dark" className="w-full">Télécharger le fichier</Button>
-              {status && <div className="text-center text-green-600 font-bold bg-green-50 p-2 rounded">{status}</div>}
-              <button onClick={onClose} className="w-full py-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">Fermer</button>
-            </div>
-          </div>
-        </div>
-      );
-    };
-
+    // --- MAIN APP ---
     const App = () => {
-      const [state, setState] = useState(() => { try { return JSON.parse(localStorage.getItem('sarange_db_v3')) || {chantiers:[],products:[],currentChantierId:null}; } catch { return {chantiers:[],products:[],currentChantierId:null}; } });
-      const [view, setView] = useState('list'); // 'dashboard', 'list', 'detail'
-      const [add, setAdd] = useState(false); const [nc, setNc] = useState({client:'',adresse:'',typeContrat:'FOURNITURE_SEULE',telephone:''});
+      const [state, setState] = useState({ chantiers: [], products: [], currentChantierId: null });
+      const [loading, setLoading] = useState(true);
+      const [view, setView] = useState('list');
       const [dark, setDark] = useState(false);
+      
+      useEffect(() => {
+        const init = async () => {
+          try {
+            const oldData = localStorage.getItem('sarange_db_v3');
+            let data;
+            if (oldData) {
+              data = JSON.parse(oldData);
+              await Storage.set('sarange_root', data);
+              localStorage.removeItem('sarange_db_v3');
+            } else {
+              data = await Storage.get('sarange_root');
+            }
+            if (data) setState(data);
+          } catch (e) { console.error("DB Error", e); } finally { setLoading(false); }
+        };
+        init();
+      }, []);
 
-      useEffect(()=>localStorage.setItem('sarange_db_v3',JSON.stringify(state)),[state]);
-      useEffect(()=>{if(dark)document.body.classList.add('dark');else document.body.classList.remove('dark');},[dark]);
+      useEffect(() => { if (!loading) Storage.set('sarange_root', state); }, [state, loading]);
+      useEffect(() => { if (dark) document.documentElement.classList.add('dark'); else document.documentElement.classList.remove('dark'); }, [dark]);
 
-      const api = useMemo(()=>({
-        state,
-        addChantier: c=>setState(s=>({...s,chantiers:[{...c,id:generateUUID()},...s.chantiers]})),
-        updateChantier: (id,d)=>setState(s=>({...s,chantiers:s.chantiers.map(x=>x.id===id?{...x,...d}:x)})),
-        selectChantier: id=>setState(s=>({...s,currentChantierId:id})),
-        deleteChantier: id=>setState(s=>({...s,chantiers:s.chantiers.filter(x=>x.id!==id),products:s.products.filter(x=>x.chantierId!==id)})),
-        saveProduct: p=>setState(s=>{ const ex=s.products.find(x=>x.id===p.id); return {...s,products:ex?s.products.map(x=>x.id===p.id?{...p,dateMaj:new Date().toISOString()}:x):[...s.products,p]}; }),
-        deleteProduct: id=>setState(s=>({...s,products:s.products.filter(x=>x.id!==id)}))
-      }), [state]);
+      const actions = {
+        addChantier: c => setState(s => ({ ...s, chantiers: [{ ...c, id: generateUUID() }, ...s.chantiers] })),
+        updateChantier: (id, d) => setState(s => ({ ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, ...d } : x) })),
+        deleteChantier: id => setState(s => ({ ...s, chantiers: s.chantiers.filter(x => x.id !== id), products: s.products.filter(x => x.chantierId !== id) })),
+        selectChantier: id => setState(s => ({ ...s, currentChantierId: id })),
+        saveProduct: p => setState(s => { const ex = s.products.find(x => x.id === p.id); const newProds = ex ? s.products.map(x => x.id === p.id ? { ...p, dateMaj: new Date().toISOString() } : x) : [...s.products, p]; return { ...s, products: newProds }; }),
+        deleteProduct: id => setState(s => ({ ...s, products: s.products.filter(x => x.id !== id) })),
+        duplicateChantier: (id) => { const c = state.chantiers.find(x => x.id === id); if(!c) return; const newId = generateUUID(); const newC = { ...c, id: newId, client: c.client + " (Copie)", date: new Date().toISOString(), dateFinalisation: null }; const cProds = state.products.filter(p => p.chantierId === id).map(p => ({ ...p, id: generateUUID(), chantierId: newId })); setState(s => ({ ...s, chantiers: [newC, ...s.chantiers], products: [...s.products, ...cProds] })); }
+      };
 
-      const saveNew = () => { if(!nc.client)return; api.addChantier({...nc,date:new Date().toISOString()}); setAdd(false); setNc({client:'',adresse:'',typeContrat:'FOURNITURE_SEULE',telephone:''}); };
+      if (loading) return null;
 
       return (
-        <AppContext.Provider value={api}>
-          <div className="min-h-screen">
-            {!state.currentChantierId ? (
-              add ? (
-                <div className="fixed inset-0 bg-slate-100 dark:bg-slate-900 z-50 flex items-center justify-center p-4">
-                  <Card className="p-6 w-full max-w-lg shadow-2xl">
-                    <h3 className="font-bold mb-4 text-xl dark:text-white">Nouveau Dossier</h3>
-                    <input className="w-full p-3 mb-3 border rounded dark:bg-slate-700 dark:text-white dark:border-slate-600" placeholder="Nom Client" value={nc.client} onChange={e=>setNc({...nc,client:e.target.value})}/>
-                    <input className="w-full p-3 mb-3 border rounded dark:bg-slate-700 dark:text-white dark:border-slate-600" placeholder="Téléphone" value={nc.telephone} onChange={e=>setNc({...nc,telephone:e.target.value})}/>
-                    <input className="w-full p-3 mb-3 border rounded dark:bg-slate-700 dark:text-white dark:border-slate-600" placeholder="Email" value={nc.email} onChange={e=>setNc({...nc,email:e.target.value})}/>
-                    <select className="w-full p-3 mb-3 border rounded dark:bg-slate-700 dark:text-white dark:border-slate-600" value={nc.typeContrat} onChange={e=>setNc({...nc,typeContrat:e.target.value})}><option value="FOURNITURE_SEULE">Fourniture Seule</option><option value="FOURNITURE_ET_POSE">Fourniture et Pose</option></select>
-                    <AddressAutocomplete value={nc.adresse} onChange={v=>setNc({...nc,adresse:v})}/>
-                    <div className="flex justify-end gap-2 mt-4"><Button variant="secondary" onClick={()=>setAdd(false)}>Annuler</Button><Button onClick={saveNew}>Créer</Button></div>
-                  </Card>
-                </div>
-              ) : (
-                <>
-                  <div className="fixed top-4 right-4 z-20"><button onClick={()=>setDark(!dark)} className="p-2 bg-white dark:bg-slate-800 rounded-full shadow-md text-slate-600 dark:text-white border dark:border-slate-700">{dark?<Sun size={20}/>:<Moon size={20}/>}</button></div>
-                  {view === 'dashboard' ? <Dashboard onNew={()=>setAdd(true)}/> : (
-                    <div className="max-w-7xl mx-auto p-4 pb-20">
-                      <div className="flex justify-between items-center mb-6 mt-2"><h1 className="text-2xl font-bold text-slate-800 dark:text-white">Dossiers</h1><div className="flex gap-2"><button onClick={()=>setView('dashboard')} className="p-2 bg-slate-200 dark:bg-slate-700 rounded-lg"><LayoutDashboard size={20}/></button><Button onClick={()=>setAdd(true)} icon={Plus}>Nouveau</Button></div></div>
-                      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                        {state.chantiers.map(c=>(
-                          <div key={c.id} onClick={()=>api.selectChantier(c.id)} className="bg-white dark:bg-slate-800 p-5 rounded-lg border dark:border-slate-700 shadow-sm cursor-pointer relative hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
-                            <h3 className="font-bold text-lg dark:text-white">{c.client}</h3><p className="text-slate-500 text-sm truncate">{c.adresse}</p>
-                            <div className="flex gap-2 mt-2 text-xs"><span className="bg-slate-100 dark:bg-slate-700 dark:text-slate-300 px-2 py-1 rounded">{new Date(c.date).toLocaleDateString()}</span>{c.dateFinalisation&&<span className="bg-purple-100 text-purple-700 px-2 py-1 rounded">Finalisé</span>}</div>
-                            <button onClick={(e)=>{e.stopPropagation();if(confirm('Supprimer?'))api.deleteChantier(c.id)}} className="absolute bottom-4 right-4 text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="fixed bottom-0 w-full bg-white dark:bg-slate-800 border-t dark:border-slate-700 flex justify-around p-3 md:hidden z-10 safe-area-pb">
-                    <button onClick={()=>setView('dashboard')} className={`flex flex-col items-center text-xs ${view==='dashboard'?'text-blue-600':'text-slate-400'}`}><LayoutDashboard size={24}/> Dashboard</button>
-                    <button onClick={()=>setView('list')} className={`flex flex-col items-center text-xs ${view==='list'?'text-blue-600':'text-slate-400'}`}><FileText size={24}/> Dossiers</button>
-                  </div>
-                </>
-              )
-            ) : <ChantierDetail/>}
+        <AppContext.Provider value={{ state, ...actions }}>
+          <div className="min-h-screen flex flex-col safe-pb">
+            {!state.currentChantierId ? <DashboardView onNew={() => setView('new')} viewMode={view} setViewMode={setView} isDark={dark} toggleDark={() => setDark(!dark)} /> : <ChantierDetailView />}
           </div>
         </AppContext.Provider>
       );
     };
 
+    const AppContext = createContext(null);
+    const useApp = () => useContext(AppContext);
+
+    // --- VIEWS ---
+    const DashboardView = ({ onNew, viewMode, setViewMode, isDark, toggleDark }) => {
+      const { state, selectChantier, deleteChantier, duplicateChantier } = useApp();
+      const [search, setSearch] = useState('');
+      const [showNewModal, setShowNewModal] = useState(false);
+      const filtered = state.chantiers.filter(c => c.client.toLowerCase().includes(search.toLowerCase()) || c.adresse.toLowerCase().includes(search.toLowerCase()));
+
+      return (
+        <>
+          <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-20 px-4 py-3">
+            <div className="flex justify-between items-center mb-4 max-w-5xl mx-auto">
+              <div className="flex items-center gap-2"><div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold">S</div><h1 className="text-xl font-bold tracking-tight">Sarange<span className="text-brand-600">Pro</span></h1></div>
+              <button onClick={toggleDark} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300">{isDark ? <Sun size={20} /> : <Moon size={20} />}</button>
+            </div>
+            <div className="max-w-5xl mx-auto relative"><Search className="absolute left-3 top-3 text-slate-400" size={20} /><input className="w-full pl-10 p-2.5 bg-slate-100 dark:bg-slate-800 border-0 rounded-xl outline-none focus:ring-2 focus:ring-brand-500 dark:text-white transition-all" placeholder="Rechercher un client..." value={search} onChange={e => setSearch(e.target.value)}/></div>
+          </header>
+          <main className="flex-1 p-4 max-w-5xl mx-auto w-full">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+              <div className="bg-brand-50 dark:bg-brand-900/20 p-4 rounded-xl border border-brand-100 dark:border-brand-900/30"><div className="text-2xl font-bold text-brand-600">{state.chantiers.length}</div><div className="text-xs text-brand-800 dark:text-brand-300 font-medium">Dossiers</div></div>
+              <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-xl border border-orange-100 dark:border-orange-900/30"><div className="text-2xl font-bold text-orange-600">{state.chantiers.filter(c=>!c.dateFinalisation).length}</div><div className="text-xs text-orange-800 dark:text-orange-300 font-medium">En cours</div></div>
+            </div>
+            <div className="flex justify-between items-center mb-4"><h2 className="font-bold text-slate-700 dark:text-slate-300">Dossiers Récents</h2><Button onClick={() => setShowNewModal(true)} icon={Plus} className="py-2 text-sm shadow-sm">Nouveau</Button></div>
+            <div className="space-y-3">
+              {filtered.map(c => (
+                <div key={c.id} onClick={() => selectChantier(c.id)} className="group bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm active:scale-[0.99] transition-all cursor-pointer hover:border-brand-400 dark:hover:border-brand-600 relative overflow-hidden">
+                  <div className="flex justify-between items-start"><div><h3 className="font-bold text-lg dark:text-white group-hover:text-brand-600 transition-colors">{c.client}</h3><p className="text-sm text-slate-500 flex items-center mt-1"><MapPin size={14} className="mr-1"/> {c.adresse}</p></div>{c.dateFinalisation ? <CheckCircle size={20} className="text-green-500"/> : <Clock size={20} className="text-orange-400"/>}</div>
+                  <div className="mt-4 flex justify-between items-center border-t border-slate-100 dark:border-slate-800 pt-3"><span className="text-xs font-mono text-slate-400">{new Date(c.date).toLocaleDateString()}</span><div className="flex gap-3"><button onClick={(e)=>{e.stopPropagation();duplicateChantier(c.id)}} className="text-slate-400 hover:text-brand-500"><Copy size={18}/></button><button onClick={(e)=>{e.stopPropagation();if(confirm('Supprimer définitivement ?')) deleteChantier(c.id)}} className="text-slate-400 hover:text-red-500"><Trash2 size={18}/></button></div></div>
+                </div>
+              ))}
+              {filtered.length === 0 && (<div className="text-center py-10 text-slate-400"><div className="mb-2">📭</div>Aucun dossier trouvé.</div>)}
+            </div>
+          </main>
+          {showNewModal && <NewChantierModal onClose={() => setShowNewModal(false)} />}
+        </>
+      );
+    };
+
+    const NewChantierModal = ({ onClose }) => {
+      const { addChantier } = useApp();
+      const [f, setF] = useState({ client: '', adresse: '', typeContrat: 'FOURNITURE_SEULE', telephone: '', email: '' });
+      const submit = () => { if (!f.client) return alert('Nom client requis'); addChantier({ ...f, date: new Date().toISOString() }); onClose(); };
+      return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 shadow-2xl">
+            <h2 className="text-xl font-bold mb-6 dark:text-white">Nouveau Dossier</h2>
+            <Input label="Nom Client" value={f.client} onChange={v => setF({...f, client: v})} placeholder="Ex: M. Dupont" />
+            <AddressInput value={f.adresse} onChange={v => setF({...f, adresse: v})} />
+            <div className="grid grid-cols-2 gap-4"><Input label="Téléphone" value={f.telephone} onChange={v => setF({...f, telephone: v})} type="tel" /><Input label="Email" value={f.email} onChange={v => setF({...f, email: v})} type="email" /></div>
+            <SelectToggle label="Type de contrat" value={f.typeContrat} onChange={v => setF({...f, typeContrat: v})} options={[{label: 'Fourniture Seule', value: 'FOURNITURE_SEULE'}, {label: 'Fourniture & Pose', value: 'FOURNITURE_ET_POSE'}]} />
+            <div className="flex gap-3 mt-6"><Button variant="secondary" onClick={onClose} className="flex-1">Annuler</Button><Button onClick={submit} className="flex-1">Créer le dossier</Button></div>
+          </div>
+        </div>
+      );
+    };
+
+    const ChantierDetailView = () => {
+      const { state, selectChantier, deleteProduct, saveProduct, updateChantier } = useApp();
+      const [editingProduct, setEditingProduct] = useState(null);
+      const [showFinalize, setShowFinalize] = useState(false);
+      const chantier = state.chantiers.find(c => c.id === state.currentChantierId);
+      const products = state.products.filter(p => p.chantierId === chantier?.id).sort((a, b) => a.index - b.index);
+      const duplicate = (e, p) => { e.stopPropagation(); saveProduct({ ...p, id: generateUUID(), index: products.length + 1, dateCreation: new Date().toISOString() }); };
+      if (!chantier) return null;
+      if (editingProduct) return <ProductEditor product={editingProduct} onSave={(p) => { saveProduct(p); setEditingProduct(null); }} onCancel={() => setEditingProduct(null)} />;
+      const totalItems = products.reduce((acc, p) => acc + (p.quantity || 1), 0);
+
+      return (
+        <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-950">
+          <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-10 shadow-sm">
+            <div className="flex items-center flex-1 min-w-0"><button onClick={() => selectChantier(null)} className="mr-3 p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-200"><ArrowLeft size={24} /></button><div className="truncate"><h2 className="font-bold text-lg dark:text-white truncate">{chantier.client}</h2><div className="text-xs text-slate-500 flex items-center gap-2"><span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{totalItems} Produit(s)</span><span>• {chantier.typeContrat === 'FOURNITURE_ET_POSE' ? 'Pose' : 'Fourn. Seule'}</span></div></div></div>
+            <Button onClick={() => setShowFinalize(true)} className="ml-2 px-3 py-2 text-sm shadow-sm" icon={Check}>Finaliser</Button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 max-w-5xl mx-auto w-full pb-24">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {products.map(p => (
+                <div key={p.id} onClick={() => setEditingProduct(p)} className={`bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border-l-[6px] cursor-pointer hover:shadow-md transition-all relative group ${p.type.includes('FENETRE') ? 'border-l-blue-500' : p.type.includes('PORTE') ? 'border-l-green-500' : 'border-l-orange-500'} border-t border-r border-b border-slate-200 dark:border-slate-800`}>
+                  <div className="flex justify-between items-start mb-2"><span className="font-bold text-lg dark:text-white">#{String(p.index).padStart(2, '0')}</span>{p.quantity > 1 && <span className="bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-300 text-xs font-bold px-2 py-1 rounded-full">x{p.quantity}</span>}</div>
+                  <div className="text-slate-800 dark:text-slate-200 font-medium mb-1">{p.type}</div>
+                  <div className="text-sm text-slate-500 mb-3">{p.largeurMm} x {p.hauteurMm} mm {p.room && `• ${p.room}`}</div>
+                  {!p.isValid && (<div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 px-2 py-1 rounded text-xs inline-flex items-center mb-2"><AlertTriangle size={12} className="mr-1" /> Incomplet</div>)}
+                  <div className="flex justify-end gap-3 mt-2 pt-3 border-t border-slate-100 dark:border-slate-800"><button onClick={(e) => duplicate(e, p)} className="text-slate-400 hover:text-brand-600 p-1"><Copy size={18}/></button><button onClick={(e) => { e.stopPropagation(); if (confirm('Supprimer ?')) deleteProduct(p.id); }} className="text-slate-400 hover:text-red-600 p-1"><Trash2 size={18}/></button></div>
+                </div>
+              ))}
+              <button onClick={() => setEditingProduct({ id: generateUUID(), chantierId: chantier.id, index: products.length + 1, type: 'FENETRE', quantity: 1, dateCreation: new Date().toISOString(), photos: [], isValid: false, validationErrors: [] })} className="min-h-[160px] border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:border-brand-400 transition-colors"><div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-full mb-2"><Plus size={24}/></div><span className="font-medium">Ajouter un produit</span></button>
+            </div>
+          </div>
+          {showFinalize && <FinalizeModal chantier={chantier} products={products} onClose={() => setShowFinalize(false)} onUpdate={(d) => updateChantier(chantier.id, d)} />}
+        </div>
+      );
+    };
+
+    // --- PRODUCT EDITOR & OTHERS (COMPLET AVEC VOS FONCTIONNALITES) ---
+    const ProductEditor = ({ product: initial, onSave, onCancel }) => {
+      const [p, setP] = useState(initial);
+      const [errors, setErrors] = useState([]);
+      const [adv, setAdv] = useState(false);
+      const fileInputRef = useRef(null);
+      const { state } = useApp();
+      
+      const update = (k, v) => setP(pr => ({ ...pr, [k]: v }));
+      const updateNested = (parent, k, v) => setP(pr => ({ ...pr, [parent]: { ...(pr[parent] || {}), [k]: v } }));
+
+      // Auto-correct logic
+      useEffect(() => {
+         if (p.type === 'FENETRE' && p.hauteurMm > 2200) setP(x => ({...x, oscilloBattant: false})); 
+      }, [p.hauteurMm]);
+
+      const handleSave = () => {
+        const check = ValidationService.validateProduct(p);
+        if (!check.isValid) {
+          setErrors(check.errors);
+          setTimeout(() => { const el = document.querySelector('.has-error'); if(el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100);
+          return;
+        }
+        onSave({ ...p, isValid: true, validationErrors: [] });
+      };
+
+      const handlePhoto = async (e) => {
+        if (e.target.files && e.target.files[0]) {
+           const compressed = await compressImage(e.target.files[0]);
+           update('photos', [...(p.photos || []), compressed]);
+        }
+      };
+
+      const isErr = (field) => errors.includes(field);
+      const FieldErr = ({ field }) => isErr(field) ? <div className="text-red-500 text-xs mt-1 font-medium">Ce champ est requis</div> : null;
+
+      return (
+        <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 z-50 flex flex-col h-full animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex justify-between items-center shadow-sm shrink-0">
+             <button onClick={onCancel} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"><X size={24} className="text-slate-500"/></button>
+             <h2 className="font-bold dark:text-white">Produit #{String(p.index).padStart(2,'0')}</h2>
+             <Button onClick={handleSave} className="px-5 py-2 rounded-full" icon={Save}>Sauver</Button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 pb-20 max-w-3xl mx-auto w-full">
+            {errors.length > 0 && (<div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-300 p-3 rounded-lg flex items-center"><AlertCircle size={20} className="mr-2"/><span>Des champs obligatoires sont manquants.</span></div>)}
+            <div className="space-y-4">
+              <div className="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
+                <SelectToggle label="Type de produit" value={p.type} onChange={v => update('type', v)} options={[{label:'Fenêtre', value:'FENETRE'}, {label:'Baie', value:'BAIE_COULISSANTE'}, {label:'Porte Entrée', value:'PORTE_ENTREE'}, {label:'Porte Service', value:'PORTE_SERVICE'}, {label:'Volet', value:'VOLET_ROULANT'}, {label:'Autre', value:'AUTRE'}]} />
+                <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-3 rounded-lg mb-4 border border-slate-100 dark:border-slate-700"><span className="font-medium text-slate-700 dark:text-slate-300">Quantité</span><div className="flex items-center gap-4"><button className="w-8 h-8 rounded-full bg-white dark:bg-slate-700 shadow text-brand-600 font-bold" onClick={() => update('quantity', Math.max(1, (p.quantity || 1) - 1))}>-</button><span className="font-bold text-xl w-6 text-center dark:text-white">{p.quantity || 1}</span><button className="w-8 h-8 rounded-full bg-white dark:bg-slate-700 shadow text-brand-600 font-bold" onClick={() => update('quantity', (p.quantity || 1) + 1)}>+</button></div></div>
+                <Input label="Localisation (Pièce)" value={p.room} onChange={v => update('room', v)} placeholder="Ex: Cuisine, Salon..." />
+                
+                {/* Description pour AUTRE */}
+                {p.type==='AUTRE' && <div className={isErr('description')?'has-error':''}><Input label="Description" value={p.description} onChange={v => update('description', v)} error={isErr('description') && 'Requis'}/></div>}
+
+                <div className="grid grid-cols-2 gap-4"><div className={isErr('largeurMm') ? 'has-error' : ''}><Input label="Largeur (mm)" type="number" value={p.largeurMm} onChange={v => update('largeurMm', parseInt(v))} error={isErr('largeurMm') && 'Requis'} /></div><div className={isErr('hauteurMm') ? 'has-error' : ''}><Input label="Hauteur (mm)" type="number" value={p.hauteurMm} onChange={v => update('hauteurMm', parseInt(v))} error={isErr('hauteurMm') && 'Requis'} /></div></div>
+                {ValidationService.isMeasureSuspicious(p.largeurMm, p.monobloc) || ValidationService.isMeasureSuspicious(p.hauteurMm, p.monobloc) ? (<div className="text-orange-500 text-xs flex items-center mt-[-10px] mb-4"><AlertTriangle size={12} className="mr-1"/> Attention: Cotes très petites (&lt;150mm)</div>) : null}
+              </div>
+
+              {['FENETRE','BAIE_COULISSANTE','PORTE_ENTREE','PORTE_SERVICE'].includes(p.type) && (
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase mb-4 tracking-wider">Caractéristiques</h3>
+                  <div className={isErr('matiere') ? 'has-error' : ''}><SelectToggle label="Matière" value={p.matiere} onChange={v => update('matiere', v)} options={[{label:'PVC', value:'PVC'}, {label:'Alu', value:'ALU'}]} /><FieldErr field="matiere"/></div>
+                  {p.matiere && (<div className={`mt-4 ${isErr('profil') ? 'has-error' : ''}`}><SelectToggle label="Type de Pose (Profil)" value={p.profil} onChange={v => update('profil', v)} options={p.matiere === 'PVC' ? [{label:'Neuf', value:'NEUF'}, {label:'Rénov 40', value:'RENO_40'}, {label:'Rénov 60', value:'RENO_60'}, {label:'Tunnel (ISO)', value:'ISO'}] : [{label:'Neuf', value:'NEUF'}, {label:'Rénov', value:'RENO'}]} /><FieldErr field="profil"/></div>)}
+                  {p.profil === 'ISO' && <Input label="Aile ISO (mm)" type="number" value={p.isoMm} onChange={v => update('isoMm', parseInt(v))} error={isErr('isoMm') && 'Requis'} />}
+                  <div className={`mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 ${isErr('couleur') ? 'has-error' : ''}`}><SelectToggle label="Couleur" value={p.couleur} onChange={v => update('couleur', v)} options={p.matiere==='PVC' ? [{label:'Blanc',value:'BLANC'},{label:'Bicolor 7016',value:'BICOLOR_7016'},{label:'Autre',value:'AUTRE'}] : [{label:'Blanc',value:'BLANC'},{label:'Gris 7016',value:'GRIS_7016'},{label:'Autre',value:'AUTRE'}]} />{p.couleur === 'AUTRE' && <Input placeholder="Préciser couleur (ex: chêne doré)" value={p.couleurAutre} onChange={v => update('couleurAutre', v)} error={isErr('couleurAutre') && 'Requis'} />}</div>
+                </div>
+              )}
+
+              {(p.type === 'FENETRE' || p.type === 'BAIE_COULISSANTE') && (
+                <div className={`bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-800 ${isErr('vitrageFlags') ? 'ring-2 ring-red-100 dark:ring-red-900' : ''}`}>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase mb-3 tracking-wider">Vitrage</h3>
+                  <div className="grid grid-cols-2 gap-3">{[['standard','Standard 4/20/4'], ['g200','G200 (Imprimé)'], ['feuillete1f','SP10 1 Face'], ['feuillete2f','SP10 2 Faces']].map(([k, label]) => (<label key={k} className={`flex items-center p-3 rounded-lg border cursor-pointer transition-all ${p.vitrageFlags?.[k] ? 'bg-brand-50 border-brand-500 text-brand-700 dark:bg-brand-900/30' : 'border-slate-200 dark:border-slate-700 dark:text-white'}`}><input type="checkbox" className="w-5 h-5 rounded text-brand-600 focus:ring-brand-500" checked={!!p.vitrageFlags?.[k]} onChange={e => updateNested('vitrageFlags', k, e.target.checked)} /><span className="ml-2 text-sm font-medium">{label}</span></label>))}</div><FieldErr field="vitrageFlags"/>
+                </div>
+              )}
+
+              {p.type === 'VOLET_ROULANT' && (
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
+                  {/* FEATURE: LIER A UN PRODUIT */}
+                  <div className="mb-4"><label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">Lier à une menuiserie</label><select className="w-full p-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:text-white" value={p.lieAProduitId||''} onChange={e=>update('lieAProduitId',e.target.value)}><option value="">-- Indépendant --</option>{state.products.filter(x=>['FENETRE','BAIE_COULISSANTE'].includes(x.type)).map(x=><option key={x.id} value={x.id}>#{x.index} {x.type}</option>)}</select></div>
+                  
+                  <SelectToggle label="Manoeuvre" value={p.manoeuvre} onChange={v => update('manoeuvre', v)} options={[{label:'Filaire',value:'FILAIRE'},{label:'Radio',value:'RADIO'},{label:'Solaire',value:'SOLAIRE'}]} />
+                  {p.manoeuvre && p.manoeuvre !== 'SOLAIRE' && (<SelectToggle label="Sortie Câble (Vue Int.)" value={p.sortieCable} onChange={v => update('sortieCable', v)} options={[{label:'Gauche',value:'GAUCHE'},{label:'Droite',value:'DROITE'}]} />)}
+                  
+                  {/* FEATURE: BOX DOMOTIQUE */}
+                  {p.manoeuvre !== 'FILAIRE' && <label className="flex items-center p-3 border rounded-lg bg-slate-50 dark:bg-slate-800 dark:border-slate-700 mt-4 mb-4"><input type="checkbox" className="w-5 h-5 accent-brand-600" checked={!!p.boxDomotique} onChange={e=>update('boxDomotique',e.target.checked)}/><span className="ml-3 font-medium dark:text-white">Box Domotique</span></label>}
+
+                  <div className="my-4"><label className="flex items-center justify-between p-3 border rounded-lg bg-slate-50 dark:bg-slate-800 dark:border-slate-700"><span className="font-medium dark:text-white">Volet Monobloc ?</span><input type="checkbox" className="w-6 h-6 accent-brand-600" checked={!!p.monobloc} onChange={e => update('monobloc', e.target.checked)} /></label>{p.monobloc && (<div className="mt-3 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg"><Input label="Hauteur Coffre à déduire" type="number" value={p.coffreADeduireMm} onChange={v => update('coffreADeduireMm', parseInt(v))} /><div className="text-right text-sm font-bold text-brand-600">Hauteur Passage: {p.hauteurMm && p.coffreADeduireMm ? p.hauteurMm - p.coffreADeduireMm : '-'} mm</div></div>)}</div>
+                </div>
+              )}
+
+              {/* FEATURE: OPTIONS AVANCEES (Including Grille Ventil & Poignée) */}
+              {ValidationService.hasAdvancedOptions(p.type) && (
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                  <button onClick={() => setAdv(!adv)} className="w-full flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800/50 font-medium text-slate-700 dark:text-slate-300"><span>Options Avancées</span>{adv ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button>
+                  {adv && (
+                    <div className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
+                      {(p.type.includes('FENETRE') || p.type.includes('PORTE')) && (
+                        <div className="space-y-3">
+                          <label className="flex items-center justify-between"><span className="dark:text-white">Ouverture Extérieure</span> <input type="checkbox" className="w-5 h-5 accent-brand-600" checked={!!p.ouvertureExterieure} onChange={e=>update('ouvertureExterieure', e.target.checked)}/></label>
+                          <label className="flex items-center justify-between"><span className="dark:text-white">Serrure à clé</span> <input type="checkbox" className="w-5 h-5 accent-brand-600" checked={!!p.serrureCle} onChange={e=>update('serrureCle', e.target.checked)}/></label>
+                          {p.type === 'FENETRE' && (
+                            <>
+                              <label className="flex items-center justify-between"><span className="dark:text-white">Oscillo-Battant</span> <input type="checkbox" className="w-5 h-5 accent-brand-600" checked={!!p.oscilloBattant} onChange={e=>update('oscilloBattant', e.target.checked)} disabled={p.hauteurMm > 2200}/></label>
+                              <label className="flex items-center justify-between"><span className="dark:text-white">Grille Ventilation</span> <input type="checkbox" className="w-5 h-5 accent-brand-600" checked={!!p.grilleVentilation} onChange={e=>update('grilleVentilation', e.target.checked)}/></label>
+                              <div className="pt-2 border-t dark:border-slate-700 mt-2">
+                                <label className="text-sm dark:text-slate-300 font-medium">Hauteur Poignée</label>
+                                <div className="flex gap-4 mt-2">
+                                  <label className="flex items-center"><input type="radio" className="accent-brand-600" checked={p.poigneeHauteur!=='AUTRE'} onChange={()=>update('poigneeHauteur','CENTREE')}/> <span className="ml-2 dark:text-white">Centrée</span></label>
+                                  <label className="flex items-center"><input type="radio" className="accent-brand-600" checked={p.poigneeHauteur==='AUTRE'} onChange={()=>update('poigneeHauteur','AUTRE')}/> <span className="ml-2 dark:text-white">Autre</span></label>
+                                </div>
+                                {p.poigneeHauteur==='AUTRE'&&<input type="number" className="mt-2 w-32 p-2 border rounded dark:bg-slate-800 dark:text-white dark:border-slate-600" placeholder="mm" value={p.poigneeHauteurMm||''} onChange={e=>update('poigneeHauteurMm',parseInt(e.target.value))}/>}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {p.type === 'VOLET_ROULANT' && (<div><SelectToggle label="Couple Moteur" value={p.coupleMoteur || 10} onChange={v=>update('coupleMoteur', v)} options={[{label:'10 Nm', value:10}, {label:'20 Nm', value:20}]}/><SelectToggle label="Type Pose VR" value={p.pose || 'RENO'} onChange={v=>update('pose', v)} options={[{label:'Rénov', value:'RENO'}, {label:'Tradi', value:'TRADI'}, {label:'Tunnel', value:'TUNNEL'}]}/></div>)}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* FEATURE: Porte Entrée Tierce */}
+              {p.type==='PORTE_ENTREE'&& (
+                <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border dark:border-slate-800">
+                  <SelectToggle label="Remplissage" value={p.remplissage} onChange={v=>update('remplissage',v)} options={[{label:'Panneau Déco Alu',value:'PANNEAU_DECORATIF_ALU'},{label:'Sandwich',value:'PANNEAU_SANDWICH'},{label:'Vitrée',value:'VITREE'}]}/>
+                  {p.largeurMm>1000 && (
+                    <div className="mt-3 pt-3 border-t dark:border-slate-700">
+                      <label className="flex items-center justify-between mb-3"><span className="dark:text-white font-medium">Tierce ?</span> <input type="checkbox" className="w-6 h-6 accent-brand-600" checked={!!p.tierce} onChange={e=>update('tierce',e.target.checked)}/></label>
+                      {p.tierce&&<Input label="Cote Passage (mm)" type="number" value={p.cotePassageMm} onChange={v=>update('cotePassageMm',v)}/>}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
+                <DrawingCanvas data={p.dessin} onChange={d => update('dessin', d)} />
+                <div className="mt-6"><label className="block text-sm font-medium mb-3 text-slate-700 dark:text-slate-300">Photos</label><div className="grid grid-cols-4 gap-2">{(p.photos || []).map((src, i) => (<div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 group"><img src={src} className="w-full h-full object-cover" /><button onClick={() => update('photos', p.photos.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow-md opacity-80 hover:opacity-100"><X size={12}/></button></div>))}<button onClick={() => fileInputRef.current?.click()} className="aspect-square rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-slate-400 hover:text-brand-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"><Camera size={24} /><span className="text-[10px] mt-1">Ajouter</span></button><input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handlePhoto} /></div></div>
+                <div className="mt-4"><label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">Notes techniques</label><textarea className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 dark:text-white h-24 text-sm focus:border-brand-500 outline-none" placeholder="Contraintes de pose, accès..." value={p.notes || ''} onChange={e => update('notes', e.target.value)}/></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const FinalizeModal = ({ chantier, products, onClose, onUpdate }) => {
+      const incomplete = products.filter(p => !p.isValid);
+      const generate = () => {
+         const date = new Date().toISOString();
+         onUpdate({ dateFinalisation: date });
+         const html = generateReportHTML(chantier, products, date);
+         const blob = new Blob([html], { type: 'text/html' });
+         const url = URL.createObjectURL(blob);
+         const win = window.open(url, '_blank');
+         if(!win) alert("Pop-up bloqué. Autorisez les pop-ups pour imprimer.");
+      };
+      return (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl text-center">
+             <div className="mb-4 flex justify-center"><div className={`p-4 rounded-full ${incomplete.length ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>{incomplete.length ? <AlertTriangle size={32}/> : <CheckCircle size={32}/>}</div></div>
+             <h3 className="text-xl font-bold mb-2 dark:text-white">Finaliser le dossier</h3>
+             {incomplete.length > 0 ? (<p className="text-orange-600 mb-6 bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg text-sm">Il reste <strong>{incomplete.length} produits incomplets</strong>. Vous devriez les vérifier avant d'exporter.</p>) : (<p className="text-slate-500 mb-6 text-sm">Le dossier est complet. Vous pouvez générer le rapport.</p>)}
+             <div className="space-y-3"><Button onClick={generate} variant={incomplete.length ? "secondary" : "primary"} className="w-full">Générer PDF / Imprimer</Button><Button onClick={onClose} variant="ghost" className="w-full">Retour</Button></div>
+          </div>
+        </div>
+      );
+    };
+
     const root = createRoot(document.getElementById('root'));
     root.render(<App />);
-    if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+
+    if('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+    }
   </script>
 </body>
 </html>
