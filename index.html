@@ -3,7 +3,8 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Sarange Pro</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
@@ -70,6 +71,15 @@
       <p class="font-medium">Chargement...</p>
     </div>
   </div>
+
+  <!-- Configuration Google Apps Script -->
+  <script>
+    window.SARANGE_CONFIG = {
+      APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbx9i9zuudy152un9kClrdKQ4z66WU7a6qYnOubjXeG6DMXyx7I__15DQwmkpHCIUREmjw/exec',
+      AUTO_SEND_ON_FINALIZE: true, // Envoi automatique à chaque finalisation
+      EMAIL_DESTINATION: 'contact@sarange.fr'
+    };
+  </script>
 
   <script type="text/babel" data-type="module" data-presets="react" src="./js/app.js"></script>
 </body>

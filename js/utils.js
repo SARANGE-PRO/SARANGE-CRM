@@ -64,3 +64,37 @@ export const ValidationService = {
         return { isValid: e.length === 0, errors: e };
     }
 };
+
+/**
+ * Construit une chaîne de texte avec toutes les options d'un produit
+ * @param {Object} product - Le produit
+ * @returns {string} - Options formatées séparées par des virgules
+ */
+export const buildOptionsString = (product) => {
+    const opts = [];
+    
+    // Options fenêtres
+    if (product.oscilloBattant) opts.push('Oscillo-battant');
+    if (product.grilleVentilation) opts.push('Grille ventilation');
+    if (product.serrureCle) opts.push('Serrure à clé');
+    if (product.ouvertureExterieure) opts.push('Ouverture extérieure');
+    
+    // Options portes
+    if (product.tierceImposte) opts.push('Tierce/Imposte');
+    if (product.tierce) opts.push(`Tierce (passage ${product.cotePassageMm}mm)`);
+    
+    // Options volets
+    if (product.monobloc) opts.push(`Monobloc (coffre ${product.coffreADeduireMm}mm)`);
+    if (product.boxDomotique) opts.push('Box domotique');
+    if (product.manoeuvre) opts.push(`Manœuvre ${product.manoeuvre}`);
+    if (product.sortieCable) opts.push(`Sortie câble ${product.sortieCable}`);
+    if (product.coupleMoteur) opts.push(`Couple ${product.coupleMoteur}Nm`);
+    if (product.pose) opts.push(`Pose ${product.pose}`);
+    
+    // Poignée personnalisée
+    if (product.poigneeHauteur === 'AUTRE' && product.poigneeHauteurMm) {
+        opts.push(`Poignée ${product.poigneeHauteurMm}mm`);
+    }
+    
+    return opts.join(', ');
+};
