@@ -56,6 +56,20 @@ const BootScreen = ({ step, error, onRetry }) => {
   );
 };
 
+// Fonction de fusion intelligente par ID
+const mergeArrays = (cloudList = [], localList = []) => {
+  const merged = [...cloudList]; // On commence avec la base Cloud
+  const cloudIds = new Set(cloudList.map(item => item.id));
+
+  // On ajoute uniquement les items locaux qui NE SONT PAS dans le cloud
+  localList.forEach(item => {
+    if (!cloudIds.has(item.id)) {
+      merged.push(item);
+    }
+  });
+
+  return merged;
+};
 
 const App = () => {
   const [st, setSt] = useState({ chantiers: [], products: [], currentChantierId: null });
@@ -79,28 +93,31 @@ const App = () => {
       finalData.chantiers = finalData.chantiers || [];
       finalData.products = finalData.products || [];
 
-      // 3. Vérification Cloud (Sync au démarrage)
+      // 3. Vérification Cloud (Sync au démarrage avec Fusion)
       if (navigator.onLine) {
         try {
           Logger.info("Vérification Cloud...");
           const snapshot = await get(child(ref(db), 'sarange_root'));
           if (snapshot.exists()) {
             const cloudData = snapshot.val();
-            const localTime = localData?.lastWriteTime || 0;
-            const cloudTime = cloudData?.lastWriteTime || 0;
+            // Normalisation cloud
+            cloudData.chantiers = cloudData.chantiers || [];
+            cloudData.products = cloudData.products || [];
 
-            if (cloudTime > localTime) {
-              Logger.info(`☁️ Cloud plus récent (${new Date(cloudTime).toLocaleTimeString()} vs ${new Date(localTime).toLocaleTimeString()}) -> Importation`);
-              // Normalisation Cloud
-              cloudData.chantiers = cloudData.chantiers || [];
-              cloudData.products = cloudData.products || [];
+            Logger.info("🔄 Fusion Cloud + Local...");
 
-              finalData = cloudData;
-              // Mise à jour locale immédiate
-              await DB.set('sarange_root', finalData);
-            } else {
-              Logger.info("💻 Local à jour (ou plus récent) -> On garde");
-            }
+            finalData = {
+              ...localData, // Settings locaux
+              lastWriteTime: Math.max(localData?.lastWriteTime || 0, cloudData.lastWriteTime || 0),
+
+              // Fusion des listes : Cloud Priority + Local Additions
+              chantiers: mergeArrays(cloudData.chantiers, finalData.chantiers),
+              products: mergeArrays(cloudData.products, finalData.products)
+            };
+
+            // Mise à jour immédiate pour sauvegarder la fusion
+            await DB.set('sarange_root', finalData);
+            Logger.info(`Fusion terminée : ${finalData.chantiers.length} chantiers`);
           }
         } catch (e) {
           Logger.error("Erreur check cloud", e);
