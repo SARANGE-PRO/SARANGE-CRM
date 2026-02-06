@@ -7,7 +7,7 @@ export default defineConfig({
         react(),
         VitePWA({
             registerType: 'autoUpdate',
-            includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+            includeAssets: ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png'],
             manifest: {
                 name: 'Sarange Pro',
                 short_name: 'SarangePro',
@@ -17,15 +17,24 @@ export default defineConfig({
                 display: 'standalone',
                 scope: '/',
                 start_url: '/',
+                orientation: 'portrait',
+                categories: ['business', 'productivity'],
                 icons: [
                     {
-                        src: 'icon-192.png',
+                        src: '/icon-192.png',
                         sizes: '192x192',
-                        type: 'image/png'
+                        type: 'image/png',
+                        purpose: 'any maskable'
                     },
                     {
-                        src: 'icon-512.png',
+                        src: '/icon-512.png',
                         sizes: '512x512',
+                        type: 'image/png',
+                        purpose: 'any maskable'
+                    },
+                    {
+                        src: '/apple-touch-icon.png',
+                        sizes: '192x192',
                         type: 'image/png'
                     }
                 ]
