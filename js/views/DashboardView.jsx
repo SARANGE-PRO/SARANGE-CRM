@@ -50,7 +50,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, isOnl
     const [filter, setFilter] = useState('all'); // 'all', 'draft', 'sent', 'archived'
 
     // Compteurs
-    const allChantiers = state.chantiers || [];
+    const allChantiers = (state.chantiers || []).filter(c => !c.deleted);
     const countAll = allChantiers.filter(c => !c.archived).length;
     const countDraft = allChantiers.filter(c => !c.archived && (!c.sendStatus || c.sendStatus === 'DRAFT' || c.sendStatus === 'ERROR')).length;
     const countSent = allChantiers.filter(c => !c.archived && c.sendStatus === 'SENT').length;

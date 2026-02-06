@@ -272,7 +272,9 @@ export const ChantierDetailView = () => {
     const [toast, setToast] = useState(null);
 
     const ch = state.chantiers.find(c => c.id === state.currentChantierId);
-    const prds = (state.products || []).filter(p => p.chantierId === ch?.id).sort((a, b) => a.index - b.index);
+    if (ch && ch.deleted) return null; // Sécurité si le chantier courant vient d'être supprimé (synchro)
+
+    const prds = (state.products || []).filter(p => p.chantierId === ch?.id && !p.deleted).sort((a, b) => a.index - b.index);
 
     // État du chantier (fallback DRAFT pour anciens chantiers)
     const sendStatus = ch?.sendStatus || 'DRAFT';

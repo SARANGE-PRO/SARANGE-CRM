@@ -1,14 +1,15 @@
 ﻿import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertCircle, Loader, Cloud, CloudOff } from 'lucide-react';
+import { AlertCircle, Loader, Cloud, CloudOff, Lock, LogOut } from 'lucide-react';
 import { Spinner } from "./ui.jsx";
 
 // Firebase imports
-import { db } from "../src/firebase.js";
-import { ref, set, get, child } from "firebase/database";
+import { db, auth, googleProvider } from "../src/firebase.js";
+import { ref, set, get, child, update } from "firebase/database";
+import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 
 import { DB, Logger } from "./db.js";
-import { generateUUID } from "./utils.js";
+import { generateUUID, mergeArraysSecure } from "./utils.js";
 import { Button } from "./ui.jsx";
 import { AppContext } from "./context.js";
 
@@ -17,17 +18,53 @@ const DashboardView = React.lazy(() => import("./views/DashboardView.jsx").then(
 const ChantierDetailView = React.lazy(() => import("./views/ChantierDetailView.jsx").then(m => ({ default: m.ChantierDetailView })));
 const SettingsView = React.lazy(() => import("./views/SettingsView.jsx").then(m => ({ default: m.SettingsView })));
 
+const ALLOWED_EMAILS = ['contact@sarange.fr'];
+
+/* --- LOGIN SCREEN COMPONENT --- */
+const LoginScreen = ({ error }) => {
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (e) {
+      console.error("Login Error", e);
+      alert("Erreur de connexion : " + e.message);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center h-screen bg-slate-50 dark:bg-slate-900 p-4">
+      <img src="/favicon-512.png" alt="Sarange Pro" className="w-32 h-auto mb-6" />
+      <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">Sarange Pro</h1>
+      <p className="text-slate-500 mb-8">Application de Métrage Professionnelle</p>
+
+      {error && (
+        <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-6 max-w-sm text-center border border-red-200">
+          <AlertCircle className="inline-block mb-1" />
+          <p className="font-bold">{error}</p>
+          <button onClick={() => signOut(auth)} className="text-sm underline mt-2">Se déconnecter</button>
+        </div>
+      )}
+
+      {!error && (
+        <Button onClick={handleLogin} className="w-full max-w-xs py-3 text-lg shadow-lg">
+          Connexion Google
+        </Button>
+      )}
+      <p className="mt-8 text-xs text-slate-400">Accès restreint au personnel autorisé.</p>
+    </div>
+  );
+};
 
 /* --- BOOT SCREEN COMPONENT --- */
 const BootScreen = ({ step, error, onRetry }) => {
   const [showLogs, setShowLogs] = useState(false);
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-slate-50 dark:bg-slate-900 absolute inset-0 z-50 p-4">
-      <div className="text-4xl mb-6 animate-bounce">🏗️</div>
+      <img src="/favicon-512.png" alt="Sarange Pro" className="w-24 h-auto mb-6 animate-pulse" />
       <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Sarange Pro</h1>
 
       {error ? (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-6 rounded-xl max-w-sm w-full text-center animate-fade-in">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-800 p-6 rounded-xl max-w-sm w-full text-center animate-fade-in">
           <AlertCircle size={48} className="mx-auto text-red-500 mb-4" />
           <h3 className="font-bold text-lg text-red-700 dark:text-red-300 mb-2">Erreur de démarrage</h3>
           <p className="text-sm text-red-600 dark:text-red-400 mb-6">{error.message}</p>
@@ -56,50 +93,22 @@ const BootScreen = ({ step, error, onRetry }) => {
   );
 };
 
-/**
- * Fusionne deux listes (Cloud et Local) en gardant TOUJOURS la version la plus récente
- * pour chaque élément individuellement.
- */
-const mergeArraysSecure = (cloudList = [], localList = []) => {
-  const map = new Map();
-
-  // 1. On met tout le Cloud dans une "Map" (Tableau intelligent)
-  cloudList.forEach(item => {
-    map.set(item.id, item);
-  });
-
-  // 2. On traite le Local
-  localList.forEach(localItem => {
-    const cloudItem = map.get(localItem.id);
-
-    if (!cloudItem) {
-      // Cas A : N'existe pas dans le Cloud => C'est un nouveau chantier local => On l'ajoute
-      map.set(localItem.id, localItem);
-    } else {
-      // Cas B : Existe dans les deux => CONFLIT !
-      // On compare les dates de modification (updatedAt)
-      const localTime = new Date(localItem.updatedAt || 0).getTime();
-      const cloudTime = new Date(cloudItem.updatedAt || 0).getTime();
-
-      if (localTime > cloudTime) {
-        // La version locale est plus récente (j'ai bossé hors ligne) => JE GAGNE
-        map.set(localItem.id, localItem);
-      } else {
-        // Cloud gagne (défaut)
-      }
-    }
-  });
-
-  // On retransforme la Map en tableau
-  return Array.from(map.values());
-};
-
 const App = () => {
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [st, setSt] = useState({ chantiers: [], products: [], currentChantierId: null });
   const [boot, setBoot] = useState({ loading: true, step: 'Init', error: null });
   const [view, setView] = useState('list');
   const [dark, setDark] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setAuthLoading(false);
+    });
+    return () => unsub();
+  }, []);
 
   const runBoot = async () => {
     try {
@@ -124,8 +133,8 @@ const App = () => {
           if (snapshot.exists()) {
             const cloudData = snapshot.val();
             // Normalisation cloud
-            cloudData.chantiers = cloudData.chantiers || [];
-            cloudData.products = cloudData.products || [];
+            cloudData.chantiers = cloudData.chantiers ? Object.values(cloudData.chantiers) : [];
+            cloudData.products = cloudData.products ? Object.values(cloudData.products) : [];
 
             Logger.info("🔄 Fusion Cloud + Local (Secure)...");
 
@@ -154,7 +163,7 @@ const App = () => {
       if (finalData.chantiers) {
         finalData.chantiers = finalData.chantiers.map(c => {
           const d = new Date(c.date).getTime();
-          if (!c.archived && (now - d > TEN_DAYS)) {
+          if (!c.deleted && !c.archived && (now - d > TEN_DAYS)) {
             changed = true;
             return { ...c, archived: true };
           }
@@ -174,7 +183,11 @@ const App = () => {
     }
   };
 
-  useEffect(() => { runBoot() }, []);
+  useEffect(() => {
+    if (user && ALLOWED_EMAILS.includes(user.email)) {
+      runBoot();
+    }
+  }, [user]);
 
   // Online/Offline listeners
   useEffect(() => {
@@ -194,6 +207,8 @@ const App = () => {
   // Auto-save logic (Local + Cloud Push)
   const saveTimeout = useRef(null);
   useEffect(() => {
+    // Only autosave if logged in and allowed
+    if (!user || !ALLOWED_EMAILS.includes(user.email)) return;
     if (boot.loading) return;
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
 
@@ -206,14 +221,26 @@ const App = () => {
         await DB.set('sarange_root', dataToSave);
       } catch (e) { Logger.error("AutoSave Local Fail", e); }
 
-      // 3. Sauvegarde Cloud (Si online)
+      // 3. Sauvegarde Cloud (Si online) - UPDATE GRANULAIRE (SAFE)
       if (navigator.onLine) {
-        set(ref(db, 'sarange_root'), dataToSave)
-          .then(() => Logger.info("☁️ Synchro Cloud OK"))
+        const updates = {};
+        // Pour chaque chantier, on crée une entrée à son ID
+        st.chantiers.forEach(c => {
+          updates['sarange_root/chantiers/' + c.id] = c;
+        });
+        // Idem pour les produits
+        st.products.forEach(p => {
+          updates['sarange_root/products/' + p.id] = p;
+        });
+        // On ajoute le timestamp global
+        updates['sarange_root/lastWriteTime'] = Date.now();
+
+        update(ref(db), updates)
+          .then(() => Logger.info("☁️ Synchro Cloud OK (Granular)"))
           .catch(e => console.error("Firebase Sync Fail", e));
       }
     }, 1000); // Debounce 1s
-  }, [st, boot.loading]);
+  }, [st, boot.loading, user]);
 
   useEffect(() => {
     if (dark) document.documentElement.classList.add('dark');
@@ -223,13 +250,21 @@ const App = () => {
   const act = {
     addChantier: c => setSt(s => ({ ...s, chantiers: [{ ...c, id: generateUUID(), updatedAt: new Date().toISOString() }, ...s.chantiers] })),
     updateChantier: (id, d) => setSt(s => ({ ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, ...d, updatedAt: new Date().toISOString() } : x) })),
-    deleteChantier: id => setSt(s => ({ ...s, chantiers: s.chantiers.filter(x => x.id !== id), products: s.products.filter(x => x.chantierId !== id) })),
+    deleteChantier: id => setSt(s => ({ ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, deleted: true, updatedAt: new Date().toISOString() } : x) })),
     selectChantier: id => setSt(s => ({ ...s, currentChantierId: id })),
     saveProduct: p => setSt(s => { const now = new Date().toISOString(); const ex = s.products.find(x => x.id === p.id); return { ...s, products: ex ? s.products.map(x => x.id === p.id ? { ...p, dateMaj: now, updatedAt: now } : x) : [...s.products, { ...p, updatedAt: now }] } }),
-    deleteProduct: id => setSt(s => ({ ...s, products: s.products.filter(x => x.id !== id) })),
-    duplicateChantier: id => { const c = st.chantiers.find(x => x.id === id); if (!c) return; const nId = generateUUID(), nC = { ...c, id: nId, client: c.client + " (Copie)", date: new Date().toISOString(), updatedAt: new Date().toISOString(), dateFinalisation: null, sendStatus: 'DRAFT', sentAt: null, lastError: null }, cP = st.products.filter(p => p.chantierId === id).map(p => ({ ...p, id: generateUUID(), chantierId: nId, updatedAt: new Date().toISOString() })); setSt(s => ({ ...s, chantiers: [nC, ...s.chantiers], products: [...s.products, ...cP] })) },
+    deleteProduct: id => setSt(s => ({ ...s, products: s.products.map(x => x.id === id ? { ...x, deleted: true, updatedAt: new Date().toISOString() } : x) })),
+    duplicateChantier: id => { const c = st.chantiers.find(x => x.id === id); if (!c) return; const nId = generateUUID(), nC = { ...c, id: nId, client: c.client + " (Copie)", date: new Date().toISOString(), updatedAt: new Date().toISOString(), dateFinalisation: null, sendStatus: 'DRAFT', sentAt: null, lastError: null }, cP = st.products.filter(p => p.chantierId === id && !p.deleted).map(p => ({ ...p, id: generateUUID(), chantierId: nId, updatedAt: new Date().toISOString() })); setSt(s => ({ ...s, chantiers: [nC, ...s.chantiers], products: [...s.products, ...cP] })) },
     importData: (newData) => { setSt(newData); DB.set('sarange_root', newData).catch(e => console.error(e)); }
   };
+
+  if (authLoading) return <div className="h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900"><Spinner size={40} className="text-brand-600" /></div>;
+
+  if (!user) return <LoginScreen />;
+
+  if (!ALLOWED_EMAILS.includes(user.email)) {
+    return <LoginScreen error={`Accès Refusé : Le compte ${user.email} n'est pas autorisé.`} />;
+  }
 
   if (boot.loading) return <BootScreen step={boot.step} error={boot.error} onRetry={runBoot} />;
 

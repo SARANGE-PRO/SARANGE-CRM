@@ -98,3 +98,41 @@ export const buildOptionsString = (product) => {
 
     return opts.join(', ');
 };
+
+/**
+ * Fusionne deux listes (Cloud et Local) en gardant TOUJOURS la version la plus récente
+ * pour chaque élément individuellement.
+ */
+export const mergeArraysSecure = (cloudList = [], localList = []) => {
+    const map = new Map();
+
+    // 1. On met tout le Cloud dans une "Map" (Tableau intelligent)
+    cloudList.forEach(item => {
+        map.set(item.id, item);
+    });
+
+    // 2. On traite le Local
+    localList.forEach(localItem => {
+        const cloudItem = map.get(localItem.id);
+
+        if (!cloudItem) {
+            // Cas A : N'existe pas dans le Cloud => C'est un nouveau chantier local => On l'ajoute
+            map.set(localItem.id, localItem);
+        } else {
+            // Cas B : Existe dans les deux => CONFLIT !
+            // On compare les dates de modification (updatedAt)
+            const localTime = new Date(localItem.updatedAt || 0).getTime();
+            const cloudTime = new Date(cloudItem.updatedAt || 0).getTime();
+
+            if (localTime > cloudTime) {
+                // La version locale est plus récente (j'ai bossé hors ligne) => JE GAGNE
+                map.set(localItem.id, localItem);
+            } else {
+                // Cloud gagne (défaut)
+            }
+        }
+    });
+
+    // On retransforme la Map en tableau
+    return Array.from(map.values());
+};
