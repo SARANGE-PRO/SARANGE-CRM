@@ -5,7 +5,7 @@ import { Spinner } from "./ui.jsx";
 
 // Firebase imports
 import { db } from "../src/firebase.js";
-import { ref, onValue, set } from "firebase/database";
+import { ref, set, get, child } from "firebase/database";
 
 import { DB, Logger } from "./db.js";
 import { generateUUID } from "./utils.js";
@@ -13,9 +13,6 @@ import { Button } from "./ui.jsx";
 import { AppContext } from "./context.js";
 
 // Vues
-// Vues importées via React.lazy dans le corps (ou pas, si on veut simplifier)
-// NOTE: L'utilisateur a demandé d'utiliser lazy pour ProductEditor... 
-// mais je vais lazy loader les VUES principales pour un meilleur splitting.
 const DashboardView = React.lazy(() => import("./views/DashboardView.jsx").then(m => ({ default: m.DashboardView })));
 const ChantierDetailView = React.lazy(() => import("./views/ChantierDetailView.jsx").then(m => ({ default: m.ChantierDetailView })));
 const SettingsView = React.lazy(() => import("./views/SettingsView.jsx").then(m => ({ default: m.SettingsView })));
@@ -72,53 +69,68 @@ const App = () => {
       setBoot({ loading: true, step: 'DB', error: null });
       await DB.init();
 
-      setBoot(b => ({ ...b, step: 'Migration' }));
-      const old = localStorage.getItem('sarange_db_v3');
-      if (old) {
-        try {
-          Logger.info("Migration depuis LocalStorage...");
-          const d = JSON.parse(old);
-          await DB.set('sarange_root', d);
-          localStorage.removeItem('sarange_db_v3');
-          Logger.info("Migration OK");
-        } catch (e) { Logger.error("Erreur Migration", e) }
-      }
-
       setBoot(b => ({ ...b, step: 'Données' }));
-      const data = await DB.get('sarange_root');
-      if (data) {
-        // Auto-archive > 10 days
-        const TEN_DAYS = 10 * 24 * 60 * 60 * 1000;
-        const now = Date.now();
-        let changed = false;
-        if (data.chantiers) {
-          data.chantiers = data.chantiers.map(c => {
-            const d = new Date(c.date).getTime();
-            if (!c.archived && (now - d > TEN_DAYS)) {
-              changed = true;
-              return { ...c, archived: true };
-            }
-            return c;
-          });
-        }
-        if (changed) Logger.info("Auto-archived old chantiers");
-        if (changed) Logger.info("Auto-archived old chantiers");
 
-        // Normalisation des données locales (au cas où corruptions)
-        const normalizedLocalData = {
-          ...data,
-          chantiers: data.chantiers || [],
-          products: data.products || []
-        };
-        setSt(normalizedLocalData);
+      // 1. Charger données locales
+      const localData = await DB.get('sarange_root');
+
+      // 2. Normalisation / Fallback
+      let finalData = localData || { chantiers: [], products: [] };
+      finalData.chantiers = finalData.chantiers || [];
+      finalData.products = finalData.products || [];
+
+      // 3. Vérification Cloud (Sync au démarrage)
+      if (navigator.onLine) {
+        try {
+          Logger.info("Vérification Cloud...");
+          const snapshot = await get(child(ref(db), 'sarange_root'));
+          if (snapshot.exists()) {
+            const cloudData = snapshot.val();
+            const localTime = localData?.lastWriteTime || 0;
+            const cloudTime = cloudData?.lastWriteTime || 0;
+
+            if (cloudTime > localTime) {
+              Logger.info(`☁️ Cloud plus récent (${new Date(cloudTime).toLocaleTimeString()} vs ${new Date(localTime).toLocaleTimeString()}) -> Importation`);
+              // Normalisation Cloud
+              cloudData.chantiers = cloudData.chantiers || [];
+              cloudData.products = cloudData.products || [];
+
+              finalData = cloudData;
+              // Mise à jour locale immédiate
+              await DB.set('sarange_root', finalData);
+            } else {
+              Logger.info("💻 Local à jour (ou plus récent) -> On garde");
+            }
+          }
+        } catch (e) {
+          Logger.error("Erreur check cloud", e);
+        }
       }
+
+      // Auto-archive logic (sur la donnée finale)
+      const TEN_DAYS = 10 * 24 * 60 * 60 * 1000;
+      const now = Date.now();
+      let changed = false;
+      if (finalData.chantiers) {
+        finalData.chantiers = finalData.chantiers.map(c => {
+          const d = new Date(c.date).getTime();
+          if (!c.archived && (now - d > TEN_DAYS)) {
+            changed = true;
+            return { ...c, archived: true };
+          }
+          return c;
+        });
+      }
+      if (changed) Logger.info("Auto-archived old chantiers");
+
+      setSt(finalData);
 
       Logger.info("App Ready");
       setBoot({ loading: false, step: 'Ready', error: null });
     } catch (e) {
       console.error(e);
       Logger.error("Boot Failed", e);
-      setBoot({ loading: true, step: 'Erreur', error: e }); // Keep loading true to show BootScreen
+      setBoot({ loading: true, step: 'Erreur', error: e });
     }
   };
 
@@ -136,46 +148,31 @@ const App = () => {
     };
   }, []);
 
-  // Firebase → Local (READ)
-  useEffect(() => {
-    const dataRef = ref(db, 'sarange_root');
-    return onValue(dataRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        setSt(prev => {
-          // Normalisation : Firebase ne renvoie pas les tableaux vides (ils sont undefined)
-          // On force donc chantiers et products à être des tableaux vides si manquants
-          const normalizedData = {
-            ...data,
-            chantiers: data.chantiers || [],
-            products: data.products || []
-          };
+  // Suppression du listener temps réel (Optimisation bande passante)
+  // La synchro se fait désormais au démarrage (runBoot) et à la sauvegarde (AutoSave)
 
-          // Safeguard: Éviter les mises à jour inutiles et boucles infinies
-          if (JSON.stringify(prev) === JSON.stringify(normalizedData)) return prev;
-
-          // Mettre à jour le state ET IndexedDB pour backup offline
-          DB.set('sarange_root', normalizedData).catch(console.error);
-          return normalizedData;
-        });
-      }
-    });
-  }, []);
-
-  // Auto-save logic (Local → Firebase)
+  // Auto-save logic (Local + Cloud Push)
   const saveTimeout = useRef(null);
   useEffect(() => {
     if (boot.loading) return;
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
-    saveTimeout.current = setTimeout(() => {
-      // 1. Sauvegarde Locale (IndexedDB)
-      DB.set('sarange_root', st).catch(e => Logger.error("AutoSave Fail", e));
 
-      // 2. Sauvegarde Cloud (Firebase) - seulement si online
+    saveTimeout.current = setTimeout(async () => {
+      // 1. Ajouter Timestamp pour la prochaine comparaison
+      const dataToSave = { ...st, lastWriteTime: Date.now() };
+
+      // 2. Sauvegarde Locale (Toujours)
+      try {
+        await DB.set('sarange_root', dataToSave);
+      } catch (e) { Logger.error("AutoSave Local Fail", e); }
+
+      // 3. Sauvegarde Cloud (Si online)
       if (navigator.onLine) {
-        set(ref(db, 'sarange_root'), st).catch(e => console.error("Firebase Sync Fail", e));
+        set(ref(db, 'sarange_root'), dataToSave)
+          .then(() => Logger.info("☁️ Synchro Cloud OK"))
+          .catch(e => console.error("Firebase Sync Fail", e));
       }
-    }, 1000);
+    }, 1000); // Debounce 1s
   }, [st, boot.loading]);
 
   useEffect(() => {
