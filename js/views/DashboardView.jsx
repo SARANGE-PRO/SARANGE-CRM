@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sun, Moon, Settings, Search, Plus, MapPin, Phone, Mail, UserCheck, CheckCircle, AlertCircle, Clock, Copy, Trash2, Archive, Menu, LogOut } from 'lucide-react';
+import { Sun, Moon, Settings, Search, Plus, MapPin, Phone, Mail, UserCheck, CheckCircle, AlertCircle, Clock, Copy, Trash2, Archive, Menu, LogOut, Cloud, CloudOff } from 'lucide-react';
 import { Button, Input, SelectToggle, Card } from "../ui.jsx";
 import { useApp } from "../context.js";
 
@@ -28,7 +28,7 @@ export const EditChantierModal = ({ chantier, onClose, onUpdate }) => {
     return <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4 animate-fade-in"><Card className="w-full max-w-md p-6 shadow-2xl"><h2 className="text-xl font-bold mb-6 dark:text-white">Modifier</h2><Input label="Nom Client" value={f.client} onChange={v => setF({ ...f, client: v })} /><AddressInput value={f.adresse} onChange={v => setF({ ...f, adresse: v })} /><div className="grid grid-cols-2 gap-4"><Input label="Tél" value={f.telephone} onChange={v => setF({ ...f, telephone: v })} type="tel" inputMode="tel" pattern="[0-9]*" /><Input label="Email" value={f.email} onChange={v => setF({ ...f, email: v })} type="email" inputMode="email" /></div><SelectToggle label="Contrat" value={f.typeContrat} onChange={v => setF({ ...f, typeContrat: v })} options={[{ label: 'Fourniture Seule', value: 'FOURNITURE_SEULE' }, { label: 'Fourniture & Pose', value: 'FOURNITURE_ET_POSE' }, { label: 'Sous-traitance', value: 'SOUS_TRAITANCE' }]} />{f.typeContrat === 'SOUS_TRAITANCE' && <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 mb-4 animate-fade-in"><h3 className="text-sm font-bold text-slate-500 mb-2 uppercase flex items-center"><UserCheck size={14} className="mr-1" /> Client Final</h3><Input label="Nom Final" value={f.clientFinal} onChange={v => setF({ ...f, clientFinal: v })} /><AddressInput value={f.adresseFinale} onChange={v => setF({ ...f, adresseFinale: v })} /></div>}<div className="flex gap-3 mt-6"><Button variant="secondary" onClick={onClose} className="flex-1">Annuler</Button><Button onClick={sub} className="flex-1">Enregistrer</Button></div></Card></div>;
 };
 
-export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings }) => {
+export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, isOnline }) => {
     const { state, selectChantier, deleteChantier, duplicateChantier } = useApp();
     const [s, setS] = useState('');
     const [m, setM] = useState(false);
@@ -103,6 +103,17 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings }) => 
                         <h1 className="text-xl font-bold tracking-tight">Sarange<span className="text-brand-600">Pro</span></h1>
                     </div>
                     <div className="flex gap-2 relative" ref={wrapperRef}>
+                        {/* Indicateur Firebase */}
+                        {isOnline ? (
+                            <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-full" title="Synchronisé">
+                                <Cloud size={20} className="text-green-500" />
+                            </div>
+                        ) : (
+                            <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full" title="Hors ligne">
+                                <CloudOff size={20} className="text-slate-400" />
+                            </div>
+                        )}
+
                         <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                             <Menu size={20} />
                         </button>
@@ -192,26 +203,35 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings }) => 
                             <div className="flex justify-between items-start">
                                 <div>
                                     <h3 className="font-bold text-lg dark:text-white group-hover:text-brand-600 transition-colors">{c.client}</h3>
-                                    <a
-                                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.adresse)}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={e => e.stopPropagation()}
-                                        className="text-sm text-slate-500 flex items-center mt-1 hover:text-brand-600 hover:underline"
-                                    >
-                                        <MapPin size={14} className="mr-1" /> {c.adresse}
-                                    </a>
+                                    <div className="text-sm text-slate-500 flex items-center mt-1">
+                                        <a
+                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.adresse)}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={e => e.stopPropagation()}
+                                            className="hover:text-brand-600 mr-1"
+                                        >
+                                            <MapPin size={14} />
+                                        </a>
+                                        <span>{c.adresse}</span>
+                                    </div>
                                     {(c.telephone || c.email) && (
                                         <div className="flex flex-wrap gap-3 mt-2 text-xs text-slate-500">
                                             {c.telephone && (
-                                                <a href={`tel:${c.telephone}`} onClick={e => e.stopPropagation()} className="flex items-center hover:text-brand-600">
-                                                    <Phone size={12} className="mr-1" /> {c.telephone}
-                                                </a>
+                                                <div className="flex items-center">
+                                                    <a href={`tel:${c.telephone}`} onClick={e => e.stopPropagation()} className="hover:text-brand-600 mr-1">
+                                                        <Phone size={12} />
+                                                    </a>
+                                                    <span>{c.telephone}</span>
+                                                </div>
                                             )}
                                             {c.email && (
-                                                <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} className="flex items-center hover:text-brand-600">
-                                                    <Mail size={12} className="mr-1" /> {c.email}
-                                                </a>
+                                                <div className="flex items-center">
+                                                    <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} className="hover:text-brand-600 mr-1">
+                                                        <Mail size={12} />
+                                                    </a>
+                                                    <span>{c.email}</span>
+                                                </div>
                                             )}
                                         </div>
                                     )}

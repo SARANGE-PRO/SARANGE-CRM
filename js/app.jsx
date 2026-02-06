@@ -1,7 +1,11 @@
 ﻿import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertCircle, Loader } from 'lucide-react';
+import { AlertCircle, Loader, Cloud, CloudOff } from 'lucide-react';
 import { Spinner } from "./ui.jsx";
+
+// Firebase imports
+import { db } from "../src/firebase.js";
+import { ref, onValue, set } from "firebase/database";
 
 import { DB, Logger } from "./db.js";
 import { generateUUID } from "./utils.js";
@@ -61,6 +65,7 @@ const App = () => {
   const [boot, setBoot] = useState({ loading: true, step: 'Init', error: null });
   const [view, setView] = useState('list');
   const [dark, setDark] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   const runBoot = async () => {
     try {
@@ -111,13 +116,49 @@ const App = () => {
 
   useEffect(() => { runBoot() }, []);
 
-  // Auto-save logic
+  // Online/Offline listeners
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Firebase → Local (READ)
+  useEffect(() => {
+    const dataRef = ref(db, 'sarange_root');
+    return onValue(dataRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        setSt(prev => {
+          // Safeguard: Éviter les mises à jour inutiles et boucles infinies
+          if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+
+          // Mettre à jour le state ET IndexedDB pour backup offline
+          DB.set('sarange_root', data).catch(console.error);
+          return data;
+        });
+      }
+    });
+  }, []);
+
+  // Auto-save logic (Local → Firebase)
   const saveTimeout = useRef(null);
   useEffect(() => {
     if (boot.loading) return;
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(() => {
+      // 1. Sauvegarde Locale (IndexedDB)
       DB.set('sarange_root', st).catch(e => Logger.error("AutoSave Fail", e));
+
+      // 2. Sauvegarde Cloud (Firebase) - seulement si online
+      if (navigator.onLine) {
+        set(ref(db, 'sarange_root'), st).catch(e => console.error("Firebase Sync Fail", e));
+      }
     }, 1000);
   }, [st, boot.loading]);
 
@@ -146,7 +187,7 @@ const App = () => {
     <AppContext.Provider value={{ state: st, ...act }}>
       <div className="min-h-screen flex flex-col safe-pb">
         <Suspense fallback={<LoadingScreen />}>
-          {view === 'settings' ? <SettingsView onBack={() => setView('list')} state={st} onImport={act.importData} /> : !st.currentChantierId ? <DashboardView onNew={() => setView('new')} viewMode={view} setViewMode={setView} isDark={dark} toggleDark={() => setDark(!dark)} onOpenSettings={() => setView('settings')} /> : <ChantierDetailView />}
+          {view === 'settings' ? <SettingsView onBack={() => setView('list')} state={st} onImport={act.importData} /> : !st.currentChantierId ? <DashboardView onNew={() => setView('new')} viewMode={view} setViewMode={setView} isDark={dark} toggleDark={() => setDark(!dark)} onOpenSettings={() => setView('settings')} isOnline={isOnline} /> : <ChantierDetailView />}
         </Suspense>
       </div>
     </AppContext.Provider>
