@@ -1,0 +1,156 @@
+﻿import React, { useState, useEffect, useRef, Suspense } from 'react';
+import { createRoot } from 'react-dom/client';
+import { AlertCircle, Loader } from 'lucide-react';
+import { Spinner } from "./ui.jsx";
+
+import { DB, Logger } from "./db.js";
+import { generateUUID } from "./utils.js";
+import { Button } from "./ui.jsx";
+import { AppContext } from "./context.js";
+
+// Vues
+// Vues importées via React.lazy dans le corps (ou pas, si on veut simplifier)
+// NOTE: L'utilisateur a demandé d'utiliser lazy pour ProductEditor... 
+// mais je vais lazy loader les VUES principales pour un meilleur splitting.
+const DashboardView = React.lazy(() => import("./views/DashboardView.jsx").then(m => ({ default: m.DashboardView })));
+const ChantierDetailView = React.lazy(() => import("./views/ChantierDetailView.jsx").then(m => ({ default: m.ChantierDetailView })));
+const SettingsView = React.lazy(() => import("./views/SettingsView.jsx").then(m => ({ default: m.SettingsView })));
+
+
+/* --- BOOT SCREEN COMPONENT --- */
+const BootScreen = ({ step, error, onRetry }) => {
+  const [showLogs, setShowLogs] = useState(false);
+  return (
+    <div className="flex flex-col items-center justify-center h-screen bg-slate-50 dark:bg-slate-900 absolute inset-0 z-50 p-4">
+      <div className="text-4xl mb-6 animate-bounce">🏗️</div>
+      <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Sarange Pro</h1>
+
+      {error ? (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-6 rounded-xl max-w-sm w-full text-center animate-fade-in">
+          <AlertCircle size={48} className="mx-auto text-red-500 mb-4" />
+          <h3 className="font-bold text-lg text-red-700 dark:text-red-300 mb-2">Erreur de démarrage</h3>
+          <p className="text-sm text-red-600 dark:text-red-400 mb-6">{error.message}</p>
+          <div className="space-y-3">
+            <Button onClick={onRetry} variant="primary" className="w-full">Réessayer</Button>
+            <div className="flex gap-2">
+              <Button onClick={() => setShowLogs(!showLogs)} variant="secondary" className="flex-1 text-xs">Logs</Button>
+              <Button onClick={() => { const u = URL.createObjectURL(Logger.getBlob()); window.open(u) }} variant="secondary" className="flex-1 text-xs">Download</Button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="w-64">
+          <div className="flex justify-between text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">
+            <span>Chargement...</span>
+            <span>{step}</span>
+          </div>
+          <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+            <div className="h-full bg-brand-600 animate-pulse w-full origin-left-right"></div>
+          </div>
+        </div>
+      )}
+
+      {showLogs && (<div className="mt-8 w-full max-w-lg bg-black text-green-400 font-mono text-xs p-4 rounded h-48 overflow-auto border border-slate-700 shadow-2xl">{Logger.logs.map((l, i) => <div key={i}><span className="opacity-50">[{l.ts.split('T')[1].split('.')[0]}]</span> <span className={l.level === 'error' ? 'text-red-400' : l.level === 'warn' ? 'text-amber-400' : ''}>{l.msg}</span></div>)}</div>)}
+    </div>
+  );
+};
+
+
+const App = () => {
+  const [st, setSt] = useState({ chantiers: [], products: [], currentChantierId: null });
+  const [boot, setBoot] = useState({ loading: true, step: 'Init', error: null });
+  const [view, setView] = useState('list');
+  const [dark, setDark] = useState(false);
+
+  const runBoot = async () => {
+    try {
+      setBoot({ loading: true, step: 'DB', error: null });
+      await DB.init();
+
+      setBoot(b => ({ ...b, step: 'Migration' }));
+      const old = localStorage.getItem('sarange_db_v3');
+      if (old) {
+        try {
+          Logger.info("Migration depuis LocalStorage...");
+          const d = JSON.parse(old);
+          await DB.set('sarange_root', d);
+          localStorage.removeItem('sarange_db_v3');
+          Logger.info("Migration OK");
+        } catch (e) { Logger.error("Erreur Migration", e) }
+      }
+
+      setBoot(b => ({ ...b, step: 'Données' }));
+      const data = await DB.get('sarange_root');
+      if (data) {
+        // Auto-archive > 10 days
+        const TEN_DAYS = 10 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        let changed = false;
+        if (data.chantiers) {
+          data.chantiers = data.chantiers.map(c => {
+            const d = new Date(c.date).getTime();
+            if (!c.archived && (now - d > TEN_DAYS)) {
+              changed = true;
+              return { ...c, archived: true };
+            }
+            return c;
+          });
+        }
+        if (changed) Logger.info("Auto-archived old chantiers");
+        setSt(data);
+      }
+
+      Logger.info("App Ready");
+      setBoot({ loading: false, step: 'Ready', error: null });
+    } catch (e) {
+      console.error(e);
+      Logger.error("Boot Failed", e);
+      setBoot({ loading: true, step: 'Erreur', error: e }); // Keep loading true to show BootScreen
+    }
+  };
+
+  useEffect(() => { runBoot() }, []);
+
+  // Auto-save logic
+  const saveTimeout = useRef(null);
+  useEffect(() => {
+    if (boot.loading) return;
+    if (saveTimeout.current) clearTimeout(saveTimeout.current);
+    saveTimeout.current = setTimeout(() => {
+      DB.set('sarange_root', st).catch(e => Logger.error("AutoSave Fail", e));
+    }, 1000);
+  }, [st, boot.loading]);
+
+  useEffect(() => {
+    if (dark) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+  }, [dark]);
+
+  const act = {
+    addChantier: c => setSt(s => ({ ...s, chantiers: [{ ...c, id: generateUUID() }, ...s.chantiers] })),
+    updateChantier: (id, d) => setSt(s => ({ ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, ...d } : x) })),
+    deleteChantier: id => setSt(s => ({ ...s, chantiers: s.chantiers.filter(x => x.id !== id), products: s.products.filter(x => x.chantierId !== id) })),
+    selectChantier: id => setSt(s => ({ ...s, currentChantierId: id })),
+    saveProduct: p => setSt(s => { const ex = s.products.find(x => x.id === p.id); return { ...s, products: ex ? s.products.map(x => x.id === p.id ? { ...p, dateMaj: new Date().toISOString() } : x) : [...s.products, p] } }),
+    deleteProduct: id => setSt(s => ({ ...s, products: s.products.filter(x => x.id !== id) })),
+    duplicateChantier: id => { const c = st.chantiers.find(x => x.id === id); if (!c) return; const nId = generateUUID(), nC = { ...c, id: nId, client: c.client + " (Copie)", date: new Date().toISOString(), dateFinalisation: null, sendStatus: 'DRAFT', sentAt: null, lastError: null }, cP = st.products.filter(p => p.chantierId === id).map(p => ({ ...p, id: generateUUID(), chantierId: nId })); setSt(s => ({ ...s, chantiers: [nC, ...s.chantiers], products: [...s.products, ...cP] })) },
+    importData: (newData) => { setSt(newData); DB.set('sarange_root', newData).catch(e => console.error(e)); }
+  };
+
+  if (boot.loading) return <BootScreen step={boot.step} error={boot.error} onRetry={runBoot} />;
+
+  // Fallback component
+  const LoadingScreen = () => <div className="h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900"><Spinner size={40} className="text-brand-600" /></div>;
+
+  return (
+    <AppContext.Provider value={{ state: st, ...act }}>
+      <div className="min-h-screen flex flex-col safe-pb">
+        <Suspense fallback={<LoadingScreen />}>
+          {view === 'settings' ? <SettingsView onBack={() => setView('list')} state={st} onImport={act.importData} /> : !st.currentChantierId ? <DashboardView onNew={() => setView('new')} viewMode={view} setViewMode={setView} isDark={dark} toggleDark={() => setDark(!dark)} onOpenSettings={() => setView('settings')} /> : <ChantierDetailView />}
+        </Suspense>
+      </div>
+    </AppContext.Provider>
+  );
+};
+
+const root = createRoot(document.getElementById('root')); root.render(<App />);

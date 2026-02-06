@@ -6,71 +6,24 @@
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Sarange Pro</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon-192.png">
-  <meta name="theme-color" content="#2563EB">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="manifest" href="/manifest.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icon-192.png">
 
+  <!-- Fonts (Optimized) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
 
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-          },
-          colors: {
-            slate: {
-              850: '#1a202c',
-              950: '#0f172a'
-            },
-            brand: {
-              50: '#eff6ff',
-              100: '#dbeafe',
-              200: '#bfdbfe',
-              300: '#93c5fd',
-              400: '#60a5fa',
-              500: '#3b82f6',
-              600: '#2563EB',
-              700: '#1d4ed8',
-              900: '#1e3a8a'
-            }
-          },
-          animation: {
-            'fade-in': 'fadeIn 0.3s ease-out',
-            'slide-up': 'slideUp 0.3s ease-out'
-          },
-          keyframes: {
-            fadeIn: {
-              '0%': { opacity: '0', transform: 'translateY(10px)' },
-              '100%': { opacity: '1', transform: 'translateY(0)' }
-            },
-            slideUp: {
-              '0%': { transform: 'translateY(100%)', opacity: '0' },
-              '100%': { transform: 'translateY(0)', opacity: '1' }
-            }
-          }
-        }
-      }
-    };
-  </script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <link rel="stylesheet" href="./css/styles.css">
+  <!-- Local Styles (Tailwind) -->
+  <script type="module" src="/src/index.css"></script>
 </head>
 
 <body class="font-sans bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200">
-  <div id="root">
-    <div class="flex flex-col items-center justify-center h-screen text-slate-400">
-      <div class="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-brand-600 mb-4"></div>
-      <p class="font-medium">Chargement...</p>
-    </div>
-  </div>
+  <div id="root"></div>
 
   <!-- Configuration Google Apps Script -->
   <script>
@@ -81,7 +34,7 @@
     };
   </script>
 
-  <script type="text/babel" data-type="module" data-presets="react" src="./js/app.js"></script>
+  <script type="module" src="./js/app.jsx"></script>
 </body>
 
 </html>

@@ -1,4 +1,4 @@
-﻿import React from 'https://esm.sh/react@18.2.0';
+﻿import React from 'react';
 
 const cn = (...parts) => parts.filter(Boolean).join(' ');
 
@@ -265,7 +265,7 @@ export const Toast = ({ message, type = 'success', onClose }) => {
         'fixed bottom-24 left-1/2 -translate-x-1/2 z-[60]',
         'px-5 py-3 rounded-full shadow-xl',
         'flex items-center gap-3',
-        'animate-slide-up',
+        'animate-fade-in',
         types[type]
       )
     },

@@ -28,7 +28,7 @@ export const compressImage = (f) =>
 
 export const ValidationService = {
     isMeasureSuspicious: (v, m) => (m ? false : v !== undefined && v > 0 && v < 300),
-    hasAdvancedOptions: (t) => ["FENETRE", "VOLET_ROULANT", "PORTE_ENTREE"].includes(t),
+    hasAdvancedOptions: (t) => ["FENETRE", "PORTE_FENETRE", "VOLET_ROULANT", "PORTE_ENTREE"].includes(t),
     validateProduct: (p) => {
         const e = [];
         if (p.type !== "AUTRE") {
@@ -38,14 +38,14 @@ export const ValidationService = {
             if (!p.description) e.push("description");
         }
 
-        if (["FENETRE", "BAIE_COULISSANTE", "PORTE_ENTREE", "PORTE_SERVICE"].includes(p.type)) {
+        if (["FENETRE", "PORTE_FENETRE", "BAIE_COULISSANTE", "PORTE_ENTREE", "PORTE_SERVICE"].includes(p.type)) {
             if (!p.matiere) e.push("matiere");
             if (!p.profil) e.push("profil");
             if (!p.couleur) e.push("couleur");
             if (p.couleur === "AUTRE" && !p.couleurAutre) e.push("couleurAutre");
             if (p.profil === "ISO" && !p.isoMm) e.push("isoMm");
 
-            if (["FENETRE", "BAIE_COULISSANTE"].includes(p.type)) {
+            if (["FENETRE", "PORTE_FENETRE", "BAIE_COULISSANTE"].includes(p.type)) {
                 const v = p.vitrageFlags || {};
                 if (!Object.values(v).some(x => x === true)) e.push("vitrageFlags");
             }
@@ -72,17 +72,17 @@ export const ValidationService = {
  */
 export const buildOptionsString = (product) => {
     const opts = [];
-    
+
     // Options fenêtres
     if (product.oscilloBattant) opts.push('Oscillo-battant');
     if (product.grilleVentilation) opts.push('Grille ventilation');
-    if (product.serrureCle) opts.push('Serrure à clé');
+    if (product.poigneeCle) opts.push('Poignée à clé');
     if (product.ouvertureExterieure) opts.push('Ouverture extérieure');
-    
+
     // Options portes
     if (product.tierceImposte) opts.push('Tierce/Imposte');
     if (product.tierce) opts.push(`Tierce (passage ${product.cotePassageMm}mm)`);
-    
+
     // Options volets
     if (product.monobloc) opts.push(`Monobloc (coffre ${product.coffreADeduireMm}mm)`);
     if (product.boxDomotique) opts.push('Box domotique');
@@ -90,11 +90,11 @@ export const buildOptionsString = (product) => {
     if (product.sortieCable) opts.push(`Sortie câble ${product.sortieCable}`);
     if (product.coupleMoteur) opts.push(`Couple ${product.coupleMoteur}Nm`);
     if (product.pose) opts.push(`Pose ${product.pose}`);
-    
+
     // Poignée personnalisée
     if (product.poigneeHauteur === 'AUTRE' && product.poigneeHauteurMm) {
         opts.push(`Poignée ${product.poigneeHauteurMm}mm`);
     }
-    
+
     return opts.join(', ');
 };
