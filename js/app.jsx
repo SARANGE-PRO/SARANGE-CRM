@@ -135,12 +135,20 @@ const App = () => {
       const data = snapshot.val();
       if (data) {
         setSt(prev => {
+          // Normalisation : Firebase ne renvoie pas les tableaux vides (ils sont undefined)
+          // On force donc chantiers et products à être des tableaux vides si manquants
+          const normalizedData = {
+            ...data,
+            chantiers: data.chantiers || [],
+            products: data.products || []
+          };
+
           // Safeguard: Éviter les mises à jour inutiles et boucles infinies
-          if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+          if (JSON.stringify(prev) === JSON.stringify(normalizedData)) return prev;
 
           // Mettre à jour le state ET IndexedDB pour backup offline
-          DB.set('sarange_root', data).catch(console.error);
-          return data;
+          DB.set('sarange_root', normalizedData).catch(console.error);
+          return normalizedData;
         });
       }
     });
