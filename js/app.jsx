@@ -110,9 +110,9 @@ const App = () => {
               ...localData, // Settings locaux
               lastWriteTime: Math.max(localData?.lastWriteTime || 0, cloudData.lastWriteTime || 0),
 
-              // Fusion des listes : Cloud Priority + Local Additions
-              chantiers: mergeArrays(cloudData.chantiers, finalData.chantiers),
-              products: mergeArrays(cloudData.products, finalData.products)
+              // Fusion des listes : Last Write Wins per Item
+              chantiers: mergeArraysSecure(cloudData.chantiers, finalData.chantiers),
+              products: mergeArraysSecure(cloudData.products, finalData.products)
             };
 
             // Mise à jour immédiate pour sauvegarder la fusion
@@ -198,13 +198,13 @@ const App = () => {
   }, [dark]);
 
   const act = {
-    addChantier: c => setSt(s => ({ ...s, chantiers: [{ ...c, id: generateUUID() }, ...s.chantiers] })),
-    updateChantier: (id, d) => setSt(s => ({ ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, ...d } : x) })),
+    addChantier: c => setSt(s => ({ ...s, chantiers: [{ ...c, id: generateUUID(), updatedAt: new Date().toISOString() }, ...s.chantiers] })),
+    updateChantier: (id, d) => setSt(s => ({ ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, ...d, updatedAt: new Date().toISOString() } : x) })),
     deleteChantier: id => setSt(s => ({ ...s, chantiers: s.chantiers.filter(x => x.id !== id), products: s.products.filter(x => x.chantierId !== id) })),
     selectChantier: id => setSt(s => ({ ...s, currentChantierId: id })),
-    saveProduct: p => setSt(s => { const ex = s.products.find(x => x.id === p.id); return { ...s, products: ex ? s.products.map(x => x.id === p.id ? { ...p, dateMaj: new Date().toISOString() } : x) : [...s.products, p] } }),
+    saveProduct: p => setSt(s => { const now = new Date().toISOString(); const ex = s.products.find(x => x.id === p.id); return { ...s, products: ex ? s.products.map(x => x.id === p.id ? { ...p, dateMaj: now, updatedAt: now } : x) : [...s.products, { ...p, updatedAt: now }] } }),
     deleteProduct: id => setSt(s => ({ ...s, products: s.products.filter(x => x.id !== id) })),
-    duplicateChantier: id => { const c = st.chantiers.find(x => x.id === id); if (!c) return; const nId = generateUUID(), nC = { ...c, id: nId, client: c.client + " (Copie)", date: new Date().toISOString(), dateFinalisation: null, sendStatus: 'DRAFT', sentAt: null, lastError: null }, cP = st.products.filter(p => p.chantierId === id).map(p => ({ ...p, id: generateUUID(), chantierId: nId })); setSt(s => ({ ...s, chantiers: [nC, ...s.chantiers], products: [...s.products, ...cP] })) },
+    duplicateChantier: id => { const c = st.chantiers.find(x => x.id === id); if (!c) return; const nId = generateUUID(), nC = { ...c, id: nId, client: c.client + " (Copie)", date: new Date().toISOString(), updatedAt: new Date().toISOString(), dateFinalisation: null, sendStatus: 'DRAFT', sentAt: null, lastError: null }, cP = st.products.filter(p => p.chantierId === id).map(p => ({ ...p, id: generateUUID(), chantierId: nId, updatedAt: new Date().toISOString() })); setSt(s => ({ ...s, chantiers: [nC, ...s.chantiers], products: [...s.products, ...cP] })) },
     importData: (newData) => { setSt(newData); DB.set('sarange_root', newData).catch(e => console.error(e)); }
   };
 
