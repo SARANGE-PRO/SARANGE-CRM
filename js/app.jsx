@@ -102,7 +102,15 @@ const App = () => {
           });
         }
         if (changed) Logger.info("Auto-archived old chantiers");
-        setSt(data);
+        if (changed) Logger.info("Auto-archived old chantiers");
+
+        // Normalisation des données locales (au cas où corruptions)
+        const normalizedLocalData = {
+          ...data,
+          chantiers: data.chantiers || [],
+          products: data.products || []
+        };
+        setSt(normalizedLocalData);
       }
 
       Logger.info("App Ready");
