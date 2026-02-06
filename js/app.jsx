@@ -56,19 +56,42 @@ const BootScreen = ({ step, error, onRetry }) => {
   );
 };
 
-// Fonction de fusion intelligente par ID
-const mergeArrays = (cloudList = [], localList = []) => {
-  const merged = [...cloudList]; // On commence avec la base Cloud
-  const cloudIds = new Set(cloudList.map(item => item.id));
+/**
+ * Fusionne deux listes (Cloud et Local) en gardant TOUJOURS la version la plus récente
+ * pour chaque élément individuellement.
+ */
+const mergeArraysSecure = (cloudList = [], localList = []) => {
+  const map = new Map();
 
-  // On ajoute uniquement les items locaux qui NE SONT PAS dans le cloud
-  localList.forEach(item => {
-    if (!cloudIds.has(item.id)) {
-      merged.push(item);
+  // 1. On met tout le Cloud dans une "Map" (Tableau intelligent)
+  cloudList.forEach(item => {
+    map.set(item.id, item);
+  });
+
+  // 2. On traite le Local
+  localList.forEach(localItem => {
+    const cloudItem = map.get(localItem.id);
+
+    if (!cloudItem) {
+      // Cas A : N'existe pas dans le Cloud => C'est un nouveau chantier local => On l'ajoute
+      map.set(localItem.id, localItem);
+    } else {
+      // Cas B : Existe dans les deux => CONFLIT !
+      // On compare les dates de modification (updatedAt)
+      const localTime = new Date(localItem.updatedAt || 0).getTime();
+      const cloudTime = new Date(cloudItem.updatedAt || 0).getTime();
+
+      if (localTime > cloudTime) {
+        // La version locale est plus récente (j'ai bossé hors ligne) => JE GAGNE
+        map.set(localItem.id, localItem);
+      } else {
+        // Cloud gagne (défaut)
+      }
     }
   });
 
-  return merged;
+  // On retransforme la Map en tableau
+  return Array.from(map.values());
 };
 
 const App = () => {
@@ -104,7 +127,7 @@ const App = () => {
             cloudData.chantiers = cloudData.chantiers || [];
             cloudData.products = cloudData.products || [];
 
-            Logger.info("🔄 Fusion Cloud + Local...");
+            Logger.info("🔄 Fusion Cloud + Local (Secure)...");
 
             finalData = {
               ...localData, // Settings locaux
