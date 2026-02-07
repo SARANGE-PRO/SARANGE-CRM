@@ -37,8 +37,8 @@ const LoginScreen = ({ error }) => {
 
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-slate-50 dark:bg-slate-900 p-4">
-      <img src="/favicon-512.png" alt="Sarange Metrage" className="w-32 h-auto mb-6" />
-      <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">Sarange Metrage</h1>
+      <img src="/favicon-512.png" alt="SarangePro" className="w-32 h-auto mb-6" />
+      <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">SarangePro</h1>
       <p className="text-slate-500 mb-8">Application de Métrage Professionnelle</p>
 
       {error && (
@@ -64,8 +64,8 @@ const BootScreen = ({ step, error, onRetry }) => {
   const [showLogs, setShowLogs] = useState(false);
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-slate-50 dark:bg-slate-900 absolute inset-0 z-50 p-4">
-      <img src="/favicon-512.png" alt="Sarange Metrage" className="w-24 h-auto mb-6 animate-pulse" />
-      <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Sarange Metrage</h1>
+      <img src="/favicon-512.png" alt="SarangePro" className="w-24 h-auto mb-6 animate-pulse" />
+      <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">SarangePro</h1>
 
       {error ? (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-800 p-6 rounded-xl max-w-sm w-full text-center animate-fade-in">

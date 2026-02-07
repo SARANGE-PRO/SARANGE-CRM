@@ -9,8 +9,8 @@ export default defineConfig({
             registerType: 'autoUpdate',
             includeAssets: ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png'],
             manifest: {
-                name: 'Sarange Metrage',
-                short_name: 'SarangeMetrage',
+                name: 'SarangePro',
+                short_name: 'SarangePro',
                 description: 'Application de métrage professionnelle pour Sarange',
                 theme_color: '#ffffff',
                 background_color: '#ffffff',
