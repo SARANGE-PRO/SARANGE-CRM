@@ -297,7 +297,23 @@ const App = () => {
           deleteGoogleEvent(target).catch(console.error);
         }
 
-        return { ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, deleted: true, deletedAt: Date.now(), updatedAt: new Date().toISOString() } : x) };
+        const newState = {
+          ...s,
+          chantiers: s.chantiers.map(x => x.id === id ? { ...x, deleted: true, deletedAt: Date.now(), updatedAt: new Date().toISOString() } : x),
+          lastWriteTime: Date.now()
+        };
+
+        // 🚨 CRITICAL: Force Save immediately (bypass debounce) to avoid data loss if app closed
+        DB.set('sarange_root', newState).catch(e => console.error("Force Save Local Fail", e));
+
+        if (navigator.onLine && user && ALLOWED_EMAILS.includes(user.email)) {
+          const updates = {};
+          updates['sarange_root/chantiers/' + id] = newState.chantiers.find(c => c.id === id);
+          updates['sarange_root/lastWriteTime'] = newState.lastWriteTime;
+          update(ref(db), updates).catch(e => console.error("Force Save Cloud Fail", e));
+        }
+
+        return newState;
       });
       showToast("Dossier mis à la corbeille");
     },
