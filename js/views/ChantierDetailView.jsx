@@ -381,11 +381,11 @@ export const ChantierDetailView = () => {
                 {/* --- BLOC D'ACTION RAPIDE --- */}
                 {needsPlanning && (
                     <div className="mb-6 bg-white dark:bg-slate-900 rounded-xl p-6 shadow-lg border-2 border-brand-500 animate-fade-in">
-                        <div className="flex items-start gap-4">
+                        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
                             <div className="bg-brand-100 dark:bg-brand-900/30 p-3 rounded-full text-brand-600 dark:text-brand-400 shrink-0">
                                 <Calendar size={32} />
                             </div>
-                            <div className="flex-1">
+                            <div className="flex-1 w-full">
                                 <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-1">
                                     Ce dossier n'est pas planifié !
                                 </h3>
@@ -393,7 +393,7 @@ export const ChantierDetailView = () => {
                                     Sélectionnez la date d'intervention pour passer à l'étape suivante.
                                 </p>
 
-                                <div className="flex gap-2">
+                                <div className="flex flex-col sm:flex-row gap-2">
                                     <input
                                         type="datetime-local"
                                         className="flex-1 p-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:border-brand-500 outline-none font-bold text-slate-700 transition-colors"
@@ -407,7 +407,7 @@ export const ChantierDetailView = () => {
                                     />
                                     <Button
                                         variant="primary"
-                                        className="font-bold uppercase"
+                                        className="font-bold uppercase w-full sm:w-auto"
                                         onClick={async () => {
                                             const input = document.getElementById(`date-picker-${ch.id}`);
                                             const val = input?.value;
