@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { ArrowLeft, Download, FileText, Trash2 } from 'lucide-react';
-import { Card } from "../ui.jsx";
+import { Card } from "../components/ui/Card.jsx";
 
 /* SettingsView - Gestion des parametres */
 export const SettingsView = ({ onBack, state, onImport }) => {

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Trash2, ArchiveRestore, AlertTriangle, AlertCircle, Clock } from 'lucide-react';
-import { Button, Card, StatusBanner } from "../ui.jsx";
+import { Button } from '../components/ui/Button.jsx';
+import { Card } from '../components/ui/Card.jsx';
+import { StatusBanner } from '../components/ui/StatusBanner.jsx';
 
 export const TrashView = ({ onBack, state, actions }) => {
     // SECURITY: Ensure array exists to avoid crash

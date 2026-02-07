@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Edit, Lock, UserCheck, AlertCircle, Plus, Send, Unlock, Trash2, Copy, AlertTriangle, CheckCircle } from 'lucide-react';
-import { Button, Modal, Checkbox, Input, StatusBanner, Toast, Spinner, SmartAddress } from "../ui.jsx";
+import { Button } from "../components/ui/Button.jsx";
+import { Modal } from "../components/ui/Modal.jsx";
+import { Checkbox } from "../components/ui/Checkbox.jsx";
+import { Input } from "../components/ui/Input.jsx";
+import { StatusBanner } from "../components/ui/StatusBanner.jsx";
+import { Toast } from "../components/ui/Toast.jsx";
+import { Spinner } from "../components/ui/Spinner.jsx";
+import { SmartAddress } from "../components/ui/SmartAddress.jsx";
 import { useApp } from "../context.js";
 import { manageGoogleEvent } from "../utils/googleCalendar.js";
 import { ProductEditor } from "../components/ProductEditor.jsx";

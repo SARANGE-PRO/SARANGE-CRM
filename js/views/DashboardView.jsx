@@ -1,7 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Sun, Moon, Settings, Search, Plus, MapPin, Phone, Mail, UserCheck, CheckCircle, AlertCircle, Clock, Copy, Trash2, Archive, Menu, LogOut, Cloud, CloudOff, Calendar, ArrowRight } from 'lucide-react';
 import { manageGoogleEvent } from "../utils/googleCalendar.js";
-import { Button, Input, SelectToggle, Card, StatusBanner, AddressInput, SmartAddress } from "../ui.jsx";
+import { Button } from "../components/ui/Button.jsx";
+import { Input } from "../components/ui/Input.jsx";
+import { SelectToggle } from "../components/ui/SelectToggle.jsx";
+import { Card } from "../components/ui/Card.jsx";
+import { StatusBanner } from "../components/ui/StatusBanner.jsx";
+import { AddressInput } from "../components/ui/AddressInput.jsx";
+import { SmartAddress } from "../components/ui/SmartAddress.jsx";
 import { useApp } from "../context.js";
 import AddToCalendarBtn from "../components/AddToCalendarBtn.jsx";
 import { checkUrgency, downloadICS } from "../utils/calendar.js";
