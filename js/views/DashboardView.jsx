@@ -57,12 +57,27 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
 
     // Planning logic
     const [planningId, setPlanningId] = useState(null);
-    const handlePlanifier = (date) => {
+    const handlePlanifier = async (date) => {
         if (planningId) {
+            // 1. Mise à jour locale immédiate
             updateChantier(planningId, { dateIntervention: date });
+
             const chant = state.chantiers.find(c => c.id === planningId);
             if (chant) {
-                try { downloadICS({ ...chant, dateIntervention: date }); } catch (e) { console.error("Auto-download ICS blocked", e); }
+                // 2. Synchro Google Calendar (Background)
+                try {
+                    /* On garde l'ICS pour l'instant si l'utilisateur y tient, 
+                       mais on ajoute surtout la synchro API */
+                    // downloadICS({ ...chant, dateIntervention: date }); 
+
+                    const updatedChantier = { ...chant, dateIntervention: date };
+                    const eventId = await manageGoogleEvent(updatedChantier);
+                    if (eventId) {
+                        updateChantier(planningId, { googleEventId: eventId });
+                    }
+                } catch (e) {
+                    console.error("Auto-sync GCal blocked", e);
+                }
             }
             setPlanningId(null);
         }
