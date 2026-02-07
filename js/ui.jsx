@@ -284,57 +284,110 @@ export const Toast = ({ message, type = 'success', onClose }) => {
 };
 
 /* --- NOUVEAU COMPOSANT : SmartAddress --- */
+/* --- AFFICHE L'ADRESSE AVEC MENU DE NAVIGATION --- */
 export const SmartAddress = ({ address, gps, className = "" }) => {
   const [showNav, setShowNav] = useState(false);
 
+  // Fonction de navigation optimisée
   const openApp = (app) => {
+    // Nettoyage de l'adresse pour l'URL
     const query = encodeURIComponent(address);
+    const lat = gps?.lat || 0;
+    const lon = gps?.lon || 0;
     let url = "";
-    if (app === 'waze') {
-      url = `https://waze.com/ul?q=${query}`;
-    } else {
-      url = `https://www.google.com/maps/search/?api=1&query=${query}`;
+
+    switch (app) {
+      case 'native':
+        // C'est ce que tu voulais : Le protocole GEO standard
+        // Sur Android, ça ouvre le menu "Ouvrir avec..." ou l'app par défaut
+        // Sur iOS, ça bascule généralement sur Apple Maps automatiquement
+        if (lat && lon) {
+          // Si on a les coordonnées précises, on les utilise avec l'adresse en label
+          url = `geo:${lat},${lon}?q=${lat},${lon}(${query})`;
+        } else {
+          // Sinon on cherche juste l'adresse
+          url = `geo:0,0?q=${query}`;
+        }
+        break;
+
+      case 'google':
+        // Lien officiel Google Maps (Universal Link)
+        // api=1 assure que ça s'ouvre bien dans l'app si installée
+        url = `https://www.google.com/maps/search/?api=1&query=${query}`;
+        break;
+
+      case 'waze':
+        // Lien officiel Waze Deep Link
+        // navigate=yes lance le guidage direct
+        url = `https://waze.com/ul?q=${query}&navigate=yes`;
+        break;
+
+      default:
+        return;
     }
+
+    // Ouvre dans une nouvelle fenêtre/application
     window.open(url, '_blank');
     setShowNav(false);
   };
 
+  if (!address) return <span className="text-slate-400 italic text-xs">Pas d'adresse</span>;
+
   return (
     <>
+      {/* Bouton principal (Lien texte) */}
       <button
         onClick={(e) => { e.stopPropagation(); setShowNav(true); }}
         className={`text-left hover:text-brand-600 hover:underline flex items-start group transition-colors ${className}`}
-        title="Ouvrir la navigation"
+        title="Lancer le GPS"
       >
         <MapPin size={14} className="mr-1 mt-0.5 shrink-0 text-slate-400 group-hover:text-brand-500" />
-        <span>{address}</span>
+        <span className="truncate">{address}</span>
       </button>
 
+      {/* MODALE DE CHOIX GPS (Bottom Sheet sur mobile) */}
       {showNav && (
-        <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-slide-up">
-            <h3 className="text-lg font-bold mb-4 dark:text-white">Navigation vers :</h3>
-            <p className="text-sm text-slate-500 mb-6">{address}</p>
-            <div className="flex flex-col gap-3">
+        <div
+          className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in safe-area-bottom"
+          onClick={() => setShowNav(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-slate-900 rounded-2xl p-4 w-full max-w-sm shadow-2xl animate-slide-up flex flex-col gap-3"
+          >
+            <div className="flex justify-between items-center mb-1">
+              <h3 className="font-bold text-lg dark:text-white">Y aller avec...</h3>
+              <button onClick={() => setShowNav(false)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:bg-slate-200"><X size={16} /></button>
+            </div>
+
+            <p className="text-xs text-slate-500 mb-2 truncate px-1">{address}</p>
+
+            {/* 1. Option Système (GEO protocol) */}
+            <button
+              onClick={() => openApp('native')}
+              className="flex items-center gap-3 p-4 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all font-bold text-slate-700 dark:text-slate-200 border-2 border-transparent focus:border-brand-500"
+            >
+              <Navigation size={22} className="text-slate-600 dark:text-slate-400" />
+              <span>Application par défaut</span>
+            </button>
+
+            <div className="grid grid-cols-2 gap-3">
+              {/* 2. Google Maps */}
               <button
                 onClick={() => openApp('google')}
-                className="flex items-center justify-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-brand-50 hover:text-brand-600 transition-all font-bold"
+                className="flex flex-col items-center justify-center gap-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-white border border-slate-100 dark:border-slate-700 shadow-sm transition-all"
               >
-                <img src="/dist/favicon-512.png" alt="Maps" className="w-6 h-6 grayscale opacity-50" />
-                Google Maps
+                <img src="https://upload.wikimedia.org/wikipedia/commons/a/aa/Google_Maps_icon_%282020%29.svg" alt="Gmaps" className="w-8 h-8" />
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Google Maps</span>
               </button>
+
+              {/* 3. Waze */}
               <button
                 onClick={() => openApp('waze')}
-                className="flex items-center justify-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-blue-50 hover:text-blue-500 transition-all font-bold"
+                className="flex flex-col items-center justify-center gap-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-white border border-slate-100 dark:border-slate-700 shadow-sm transition-all"
               >
-                <Navigation size={22} className="text-blue-500" />
-                Waze
-              </button>
-              <button
-                onClick={() => setShowNav(false)}
-                className="mt-2 py-3 text-slate-400 hover:text-slate-600 font-medium"
-              >
-                Annuler
+                <img src="https://upload.wikimedia.org/wikipedia/commons/d/d1/Waze_2020.svg" alt="Waze" className="w-8 h-8" />
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Waze</span>
               </button>
             </div>
           </div>
