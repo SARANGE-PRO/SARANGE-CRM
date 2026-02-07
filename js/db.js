@@ -60,7 +60,12 @@ export const DB = {
             try {
                 const tx = this.db.transaction("data", "readwrite").objectStore("data").put({ key, value });
                 tx.onsuccess = () => r();
-                tx.onerror = () => j(tx.error);
+                tx.onerror = () => {
+                    if (tx.error && tx.error.name === 'QuotaExceededError') {
+                        Logger.error("CRITICAL: IndexedDB Quota Exceeded! Storage is full.");
+                    }
+                    j(tx.error);
+                };
             } catch (e) { j(e); }
         });
     }

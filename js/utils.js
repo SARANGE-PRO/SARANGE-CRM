@@ -7,6 +7,20 @@ export const generateUUID = () =>
             return v.toString(16);
         });
 
+/**
+ * Échappe les caractères HTML pour éviter les failles XSS.
+ */
+export const escapeHTML = (str) => {
+    if (!str || typeof str !== 'string') return str;
+    return str.replace(/[&<>"']/g, (m) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[m]);
+};
+
 export const compressImage = (f) =>
     new Promise((r) => {
         const rd = new FileReader();

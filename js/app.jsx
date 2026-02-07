@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertCircle, Loader, Cloud, CloudOff, Lock, LogOut } from 'lucide-react';
-import { Spinner } from "./ui.jsx";
+import { AlertCircle, Loader, Lock, LogOut } from 'lucide-react';
+import { Spinner } from "./components/ui/Spinner.jsx";
 
 // Firebase imports
 import { db, auth, googleProvider } from "../src/firebase.js";
@@ -10,7 +10,8 @@ import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 
 import { DB, Logger } from "./db.js";
 import { generateUUID, mergeArraysSecure } from "./utils.js";
-import { Button, Toast } from "./ui.jsx";
+import { Button } from "./components/ui/Button.jsx"
+import { Toast } from "./components/ui/Toast.jsx";
 import { AppContext } from "./context.js";
 import { initCalendarClient, deleteGoogleEvent } from "./utils/googleCalendar.js";
 import { ErrorBoundary } from "./components/ErrorBoundary.jsx";
@@ -285,7 +286,7 @@ const App = () => {
     else document.documentElement.classList.remove('dark');
   }, [dark]);
 
-  const act = {
+  const act = React.useMemo(() => ({
     addChantier: c => {
       setSt(s => ({ ...s, chantiers: [{ ...c, id: generateUUID(), updatedAt: new Date().toISOString() }, ...s.chantiers] }));
       showToast("Dossier créé");
@@ -410,7 +411,7 @@ const App = () => {
     deleteProduct: id => setSt(s => ({ ...s, products: s.products.map(x => x.id === id ? { ...x, deleted: true, updatedAt: new Date().toISOString() } : x) })),
     duplicateChantier: id => { const c = st.chantiers.find(x => x.id === id); if (!c) return; const nId = generateUUID(), nC = { ...c, id: nId, client: c.client + " (Copie)", date: new Date().toISOString(), updatedAt: new Date().toISOString(), dateFinalisation: null, sendStatus: 'DRAFT', sentAt: null, lastError: null }, cP = st.products.filter(p => p.chantierId === id && !p.deleted).map(p => ({ ...p, id: generateUUID(), chantierId: nId, updatedAt: new Date().toISOString() })); setSt(s => ({ ...s, chantiers: [nC, ...s.chantiers], products: [...s.products, ...cP] })); showToast("Dossier dupliqué"); },
     importData: (newData) => { setSt(newData); DB.set('sarange_root', newData).catch(e => console.error(e)); }
-  };
+  }), [st, user]);
 
   if (authLoading) return <div className="h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900"><Spinner size={40} className="text-brand-600" /></div>;
 
@@ -421,6 +422,7 @@ const App = () => {
   }
 
   if (boot.loading) return <BootScreen step={boot.step} error={boot.error} onRetry={runBoot} />;
+
 
   // Fallback component
   const LoadingScreen = () => <div className="h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900"><Spinner size={40} className="text-brand-600" /></div>;

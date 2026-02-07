@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Save, Lock, AlertCircle, AlertTriangle, ChevronUp, ChevronDown, Camera, Droplets } from 'lucide-react';
 import { compressImage, ValidationService } from "../utils.js";
-import { Button, Input, SelectToggle } from "../ui.jsx";
+import { Button } from "./ui/Button.jsx";
+import { Input } from "./ui/Input.jsx";
+import { SelectToggle } from "./ui/SelectToggle.jsx";
 import { DrawingCanvas } from "./DrawingCanvas.jsx";
 import { useApp } from "../context.js";
 
@@ -65,8 +67,8 @@ export const ProductEditor = ({ product: init, onSave, onCancel, isReadOnly = fa
                         <Input label="Localisation" value={p.room} onChange={hRm} placeholder="Ex: Cuisine" disabled={isReadOnly} />
                         {p.type === 'AUTRE' && <Input id="field-description" label="Description" value={p.description} onChange={v => up('description', v)} error={isE('description')} disabled={isReadOnly} />}
                         <div className="grid grid-cols-2 gap-4">
-                            <Input id="field-largeurMm" label="Largeur (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.largeurMm} onChange={v => up('largeurMm', parseInt(v))} error={isE('largeurMm')} disabled={isReadOnly} />
-                            <Input id="field-hauteurMm" label="Hauteur (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.hauteurMm} onChange={v => up('hauteurMm', parseInt(v))} error={isE('hauteurMm')} disabled={isReadOnly} />
+                            <Input id="field-largeurMm" label="Largeur (mm)" type="number" inputMode="decimal" step="any" pattern="[0-9]*" value={p.largeurMm} onChange={v => up('largeurMm', parseInt(v))} error={isE('largeurMm')} disabled={isReadOnly} />
+                            <Input id="field-hauteurMm" label="Hauteur (mm)" type="number" inputMode="decimal" step="any" pattern="[0-9]*" value={p.hauteurMm} onChange={v => up('hauteurMm', parseInt(v))} error={isE('hauteurMm')} disabled={isReadOnly} />
                         </div>
                         {(ValidationService.isMeasureSuspicious(p.largeurMm, p.monobloc) || ValidationService.isMeasureSuspicious(p.hauteurMm, p.monobloc)) && <div className="text-orange-500 text-xs flex items-center mt-[-10px] mb-4"><AlertTriangle size={12} className="mr-1" /> Attention: Cotes &lt;300mm</div>}
                     </div>
@@ -77,7 +79,7 @@ export const ProductEditor = ({ product: init, onSave, onCancel, isReadOnly = fa
                             <h3 className="text-xs font-bold text-slate-400 uppercase mb-4 tracking-wider">Caractéristiques</h3>
                             <SelectToggle id="field-matiere" label="Matière" value={p.matiere} onChange={v => up('matiere', v)} error={isE('matiere')} disabled={isReadOnly} options={[{ label: 'PVC', value: 'PVC' }, { label: 'Alu', value: 'ALU' }]} />
                             {p.matiere && <SelectToggle id="field-profil" label="Profil" value={p.profil} onChange={v => up('profil', v)} error={isE('profil')} disabled={isReadOnly} options={p.matiere === 'PVC' ? [{ label: 'Réno 40', value: 'RENO_40' }, { label: 'Réno 60', value: 'RENO_60' }, { label: 'Neuf', value: 'NEUF' }, { label: 'ISO', value: 'ISO' }, { label: 'Autre', value: 'AUTRE' }] : [{ label: 'Réno', value: 'RENO' }, { label: 'Neuf', value: 'NEUF' }, { label: 'Autre', value: 'AUTRE' }]} />}
-                            {p.profil === 'ISO' && <Input id="field-isoMm" label="Aile ISO (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.isoMm} onChange={v => up('isoMm', parseInt(v))} error={isE('isoMm')} disabled={isReadOnly} />}
+                            {p.profil === 'ISO' && <Input id="field-isoMm" label="Aile ISO (mm)" type="number" inputMode="decimal" step="any" pattern="[0-9]*" value={p.isoMm} onChange={v => up('isoMm', parseInt(v))} error={isE('isoMm')} disabled={isReadOnly} />}
                             {p.profil === 'AUTRE' && <Input id="field-profilAutre" label="Profil personnalisé" placeholder="Préciser le profil..." value={p.profilAutre} onChange={v => up('profilAutre', v)} error={isE('profilAutre')} disabled={isReadOnly} />}
                             <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
                                 <SelectToggle id="field-couleur" label="Couleur" value={p.couleur} onChange={v => up('couleur', v)} error={isE('couleur')} disabled={isReadOnly} options={p.matiere === 'PVC' ? [{ label: 'Blanc', value: 'BLANC' }, { label: 'Bicolor 7016', value: 'BICOLOR_7016' }, { label: 'Autre', value: 'AUTRE' }] : [{ label: 'Blanc', value: 'BLANC' }, { label: 'Gris 7016', value: 'GRIS_7016' }, { label: 'Autre', value: 'AUTRE' }]} />
@@ -153,7 +155,7 @@ export const ProductEditor = ({ product: init, onSave, onCancel, isReadOnly = fa
                                     <input type="checkbox" className="w-6 h-6 accent-brand-600" checked={!!p.soubassement} onChange={e => up('soubassement', e.target.checked)} disabled={isReadOnly} />
                                 </label>
                             </div>
-                            {p.soubassement && <Input id="field-soubassementHauteurMm" label="Hauteur Soubassement (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.soubassementHauteurMm} onChange={v => up('soubassementHauteurMm', parseInt(v))} placeholder="Ex: 400" disabled={isReadOnly} />}
+                            {p.soubassement && <Input id="field-soubassementHauteurMm" label="Hauteur Soubassement (mm)" type="number" inputMode="decimal" step="any" pattern="[0-9]*" value={p.soubassementHauteurMm} onChange={v => up('soubassementHauteurMm', parseInt(v))} placeholder="Ex: 400" disabled={isReadOnly} />}
                             <div className="pt-2">
                                 <label className="text-sm dark:text-slate-300 font-medium mb-2 block">Hauteur Poignée</label>
                                 <div className="flex gap-2">
@@ -190,7 +192,7 @@ export const ProductEditor = ({ product: init, onSave, onCancel, isReadOnly = fa
                                 </label>
                                 {p.monobloc && (
                                     <div className="mt-3 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
-                                        <Input label="Hauteur Coffre" type="number" inputMode="numeric" pattern="[0-9]*" value={p.coffreADeduireMm} onChange={v => up('coffreADeduireMm', parseInt(v))} error={isE('coffreADeduireMm')} disabled={isReadOnly} />
+                                        <Input label="Hauteur Coffre" type="number" inputMode="decimal" step="any" pattern="[0-9]*" value={p.coffreADeduireMm} onChange={v => up('coffreADeduireMm', parseInt(v))} error={isE('coffreADeduireMm')} disabled={isReadOnly} />
                                         <div className="text-right text-sm font-bold text-brand-600">Passage: {p.hauteurMm && p.coffreADeduireMm ? p.hauteurMm - p.coffreADeduireMm : '-'} mm</div>
                                     </div>
                                 )}
@@ -261,7 +263,7 @@ export const ProductEditor = ({ product: init, onSave, onCancel, isReadOnly = fa
                                         <span className="dark:text-white font-medium">Tierce ?</span>
                                         <input type="checkbox" className="w-6 h-6 accent-brand-600" checked={!!p.tierce} onChange={e => up('tierce', e.target.checked)} disabled={isReadOnly} />
                                     </label>
-                                    {p.tierce && <Input id="field-cotePassageMm" label="Cote Passage (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.cotePassageMm} onChange={v => up('cotePassageMm', v)} error={isE('cotePassageMm')} disabled={isReadOnly} />}
+                                    {p.tierce && <Input id="field-cotePassageMm" label="Cote Passage (mm)" type="number" inputMode="decimal" step="any" pattern="[0-9]*" value={p.cotePassageMm} onChange={v => up('cotePassageMm', v)} error={isE('cotePassageMm')} disabled={isReadOnly} />}
                                 </div>
                             )}
                         </div>
