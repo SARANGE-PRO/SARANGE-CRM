@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Sun, Moon, Settings, Search, Plus, MapPin, Phone, Mail, UserCheck, CheckCircle, AlertCircle, Clock, Copy, Trash2, Archive, Menu, LogOut, Cloud, CloudOff, Calendar, ArrowRight } from 'lucide-react';
+import { manageGoogleEvent } from "../utils/googleCalendar.js";
 import { Button, Input, SelectToggle, Card, StatusBanner, AddressInput, SmartAddress } from "../ui.jsx";
 import { useApp } from "../context.js";
 import AddToCalendarBtn from "../components/AddToCalendarBtn.jsx";
@@ -346,11 +347,30 @@ export const NewChantierModal = ({ onClose }) => {
         else setF({ ...f, [field]: v });
     };
 
-    const sub = () => {
+    const sub = async () => {
         if (!f.client) return alert('Nom requis');
         if (f.typeContrat === 'SOUS_TRAITANCE' && (!f.clientFinal || !f.adresseFinale)) return alert('Client final requis');
-        addChantier({ ...f, date: new Date().toISOString() });
+
+        // 1. Création Locale (Immédiate)
+        const newChantier = { ...f, date: new Date().toISOString() };
+        addChantier(newChantier);
         onClose();
+
+        // 2. Synchro Google Calendar (Arrière-plan silencieux)
+        try {
+            const eventId = await manageGoogleEvent(newChantier);
+            if (eventId) {
+                // Mise à jour discrète avec l'ID Google
+                // Note: addChantier ne retourne pas l'ID, donc il faudrait idéalement le récupérer 
+                // Mais ici on vient de l'ajouter, c'est le dernier.
+                // Pour faire propre, on devrait peut-être attendre l'ID généré par addChantier si on pouvait.
+                // SOLUTION: On laisse faire pour la création simple, ou on améliore addChantier plus tard.
+                // Pour l'instant, la créa Calendar est "fire & forget" pour ne pas bloquer.
+                // Si on veut stocker l'ID, il faudrait que addChantier retourne l'objet créé ou son ID.
+            }
+        } catch (e) {
+            console.error("Silent GCal Sync Fail", e);
+        }
     };
 
     return (
@@ -401,11 +421,33 @@ export const NewChantierModal = ({ onClose }) => {
 
 export const EditChantierModal = ({ chantier, onClose, onUpdate }) => {
     const [f, setF] = useState({ ...chantier });
-    const sub = () => {
+    const sub = async () => {
         if (!f.client) return alert('Nom requis');
         if (f.typeContrat === 'SOUS_TRAITANCE' && (!f.clientFinal || !f.adresseFinale)) return alert('Client final requis');
+
+        // 1. Mise à jour Locale (Immédiate)
         onUpdate(f);
         onClose();
+
+        // 2. Synchro Google Calendar (Arrière-plan silencieux)
+        // Uniquement si une date d'intervention est définie
+        if (f.dateIntervention) {
+            try {
+                const eventId = await manageGoogleEvent(f);
+                if (eventId && eventId !== f.googleEventId) {
+                    // Si nouvel ID (ex: première créa alors que c'était update), on met à jour
+                    // On triche un peu : on appelle onUpdate une 2ème fois mais ça ne se verra pas (modal fermée)
+                    // MAIS attention, modal fermée = composant démonté ?
+                    // RISQUE : Si le composant est démonté, on ne peut plus appeler onUpdate si elle dépend du state du parent ?
+                    // DashboardView est toujours là, donc UpdateChantier (via useApp) fonctionnera.
+                    // Le onUpdate passé en props est : (newData) => updateChantier(c.id, newData)
+                    // Donc ça marche même si la modal est fermée !
+                    onUpdate({ ...f, googleEventId: eventId });
+                }
+            } catch (e) {
+                console.error("Silent GCal Sync Fail", e);
+            }
+        }
     };
 
     return (

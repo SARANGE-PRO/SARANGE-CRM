@@ -12,6 +12,7 @@ import { DB, Logger } from "./db.js";
 import { generateUUID, mergeArraysSecure } from "./utils.js";
 import { Button, Toast } from "./ui.jsx";
 import { AppContext } from "./context.js";
+import { initCalendarClient } from "./utils/googleCalendar.js";
 
 // Vues
 const DashboardView = React.lazy(() => import("./views/DashboardView.jsx").then(m => ({ default: m.DashboardView })));
@@ -112,6 +113,11 @@ const App = () => {
       setAuthLoading(false);
     });
     return () => unsub();
+  }, []);
+
+  // Init Google Calendar
+  useEffect(() => {
+    initCalendarClient().catch(console.error);
   }, []);
 
   const runBoot = async () => {
