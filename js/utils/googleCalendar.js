@@ -112,6 +112,12 @@ export const manageGoogleEvent = async (chantier) => {
     const colorId = isMetrage ? "5" : "10"; // 5=Jaune, 10=Vert
     const titre = `${isMetrage ? 'MÉTRAGE' : 'POSE'} : ${chantier.client}`;
 
+    // 🔴 SAFETY CHECK : Pas de date = Pas de calendrier
+    if (!chantier.dateIntervention) {
+        console.log("ℹ️ Pas de date d'intervention définie, lecture/écriture Google Calendar annulée.");
+        return null;
+    }
+
     // 4. Récupérer l'agenda (Peut échouer si token expiré => Retry)
     let calendarId;
     try {

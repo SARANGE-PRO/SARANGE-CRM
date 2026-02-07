@@ -357,19 +357,17 @@ export const NewChantierModal = ({ onClose }) => {
         onClose();
 
         // 2. Synchro Google Calendar (Arrière-plan silencieux)
-        try {
-            const eventId = await manageGoogleEvent(newChantier);
-            if (eventId) {
-                // Mise à jour discrète avec l'ID Google
-                // Note: addChantier ne retourne pas l'ID, donc il faudrait idéalement le récupérer 
-                // Mais ici on vient de l'ajouter, c'est le dernier.
-                // Pour faire propre, on devrait peut-être attendre l'ID généré par addChantier si on pouvait.
-                // SOLUTION: On laisse faire pour la création simple, ou on améliore addChantier plus tard.
-                // Pour l'instant, la créa Calendar est "fire & forget" pour ne pas bloquer.
-                // Si on veut stocker l'ID, il faudrait que addChantier retourne l'objet créé ou son ID.
+        // Note : NewChantierModal n'a pas de champ dateIntervention actuellement.
+        // On ne tente la synchro que si une date est définie (futur support)
+        if (newChantier.dateIntervention) {
+            try {
+                const eventId = await manageGoogleEvent(newChantier);
+                if (eventId) {
+                    // Possibilité de MAJ state si besoin
+                }
+            } catch (e) {
+                console.error("Silent GCal Sync Fail", e);
             }
-        } catch (e) {
-            console.error("Silent GCal Sync Fail", e);
         }
     };
 
