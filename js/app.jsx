@@ -12,7 +12,7 @@ import { DB, Logger } from "./db.js";
 import { generateUUID, mergeArraysSecure } from "./utils.js";
 import { Button, Toast } from "./ui.jsx";
 import { AppContext } from "./context.js";
-import { initCalendarClient } from "./utils/googleCalendar.js";
+import { initCalendarClient, deleteGoogleEvent } from "./utils/googleCalendar.js";
 
 // Vues
 const DashboardView = React.lazy(() => import("./views/DashboardView.jsx").then(m => ({ default: m.DashboardView })));
@@ -289,7 +289,15 @@ const App = () => {
 
     // Soft Delete (Corbeille)
     deleteChantier: id => {
-      setSt(s => ({ ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, deleted: true, deletedAt: Date.now(), updatedAt: new Date().toISOString() } : x) }));
+      setSt(s => {
+        const target = s.chantiers.find(c => c.id === id);
+        if (target && target.googleEventId) {
+          // Suppression asynchrone Google Calendar (Silent)
+          deleteGoogleEvent(target).catch(console.error);
+        }
+
+        return { ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, deleted: true, deletedAt: Date.now(), updatedAt: new Date().toISOString() } : x) };
+      });
       showToast("Dossier mis à la corbeille");
     },
 

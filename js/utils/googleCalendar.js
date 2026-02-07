@@ -89,13 +89,6 @@ export const manageGoogleEvent = async (chantier) => {
     }
 
     // 2. Vérifier si on a un token valide (Token Model)
-    // Contrairement à l'ancien gapi.auth2, on n'a pas de "isSignedIn".
-    // On doit avoir un token en cache, ou en demander un.
-    // Astuce : on tente l'appel API directement. S'il échoue (401), on demande le token.
-
-    // MAIS, pour le premier appel, on peut vérifier gapi.client.getToken()
-    // Si null, on demande l'auth.
-
     if (!window.gapi.client.getToken()) {
         console.log("🔒 Demande de permission Google...");
         try {
@@ -134,9 +127,7 @@ export const manageGoogleEvent = async (chantier) => {
     }
 
     // 5. Build Event
-    // Date début
     const startDateTime = new Date(chantier.dateIntervention);
-    // Fin (+1h par défaut)
     const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
 
     const eventResource = {
@@ -189,8 +180,6 @@ export const manageGoogleEvent = async (chantier) => {
 
     } catch (e) {
         if (e.status === 401) {
-            // Si jamais 401 ici (peu probable si géré au step 4, mais possible), on pourrait retry.
-            // Pour l'instant on log juste l'erreur pour éviter boucle infinie.
             console.error("❌ Erreur 401 sur Event (Token expiré ?)", e);
         } else {
             console.error("❌ Erreur Sync Event", e);
@@ -199,21 +188,48 @@ export const manageGoogleEvent = async (chantier) => {
     }
 };
 
+/**
+ * Supprime l'événement Google associé
+ */
+export const deleteGoogleEvent = async (chantier) => {
+    if (!chantier.googleEventId) return;
+
+    try {
+        await initCalendarClient();
+
+        if (!window.gapi.client.getToken()) {
+            // Si pas de token, on ne force pas la popup à la suppression (trop intrusif)
+            // On log juste et on abandonne (fail soft)
+            console.warn("Pas de token, suppression GCal ignorée");
+            return;
+        }
+
+        const isMetrage = !chantier.datePose && (chantier.status !== 'POSE');
+        const calendarName = isMetrage ? "Sarange - Métrages" : "Sarange - Pose";
+
+        const calendarId = await getOrCreateCalendarId(calendarName);
+
+        await window.gapi.client.calendar.events.delete({
+            calendarId: calendarId,
+            eventId: chantier.googleEventId
+        });
+
+        console.log("🗑️ Événement Google supprimé");
+
+    } catch (e) {
+        console.error("Erreur suppression GCal", e);
+    }
+};
+
 
 // --- HELPERS ---
 
-/**
- * Ouvre la popup GIS pour demander l'accès
- */
 function requestAccessToken() {
     return new Promise((resolve, reject) => {
         tokenClient.callback = (resp) => {
             if (resp.error) reject(resp);
             else resolve(resp);
         };
-        // override scope if needed, or use default
-        // prompt: '' (default) -> auto selects account if 1, or shows picker.
-        // Si l'user a déjà approuvé, ça peut être transparent ou presque.
         tokenClient.requestAccessToken({ prompt: '' });
     });
 }
