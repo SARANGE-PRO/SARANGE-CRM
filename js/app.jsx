@@ -13,6 +13,7 @@ import { generateUUID, mergeArraysSecure } from "./utils.js";
 import { Button, Toast } from "./ui.jsx";
 import { AppContext } from "./context.js";
 import { initCalendarClient, deleteGoogleEvent } from "./utils/googleCalendar.js";
+import { ErrorBoundary } from "./components/ErrorBoundary.jsx";
 
 // Vues
 const DashboardView = React.lazy(() => import("./views/DashboardView.jsx").then(m => ({ default: m.DashboardView })));
@@ -365,16 +366,18 @@ const App = () => {
   return (
     <AppContext.Provider value={{ state: st, ...act }}>
       <div className="min-h-screen flex flex-col safe-pb">
-        <Suspense fallback={<LoadingScreen />}>
-          {view === 'settings' ?
-            <SettingsView onBack={() => setView('list')} state={st} onImport={act.importData} /> :
-            view === 'trash' ?
-              /* Lazy loading du TrashView qui sera créé juste après */
-              <TrashView onBack={() => setView('list')} state={st} actions={act} /> :
-              !st.currentChantierId ?
-                <DashboardView onNew={() => setView('new')} viewMode={view} setViewMode={setView} isDark={dark} toggleDark={() => setDark(!dark)} onOpenSettings={() => setView('settings')} onOpenTrash={() => setView('trash')} isOnline={isOnline} /> :
-                <ChantierDetailView />}
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<LoadingScreen />}>
+            {view === 'settings' ?
+              <SettingsView onBack={() => setView('list')} state={st} onImport={act.importData} /> :
+              view === 'trash' ?
+                /* Lazy loading du TrashView qui sera créé juste après */
+                <TrashView onBack={() => setView('list')} state={st} actions={act} /> :
+                !st.currentChantierId ?
+                  <DashboardView onNew={() => setView('new')} viewMode={view} setViewMode={setView} isDark={dark} toggleDark={() => setDark(!dark)} onOpenSettings={() => setView('settings')} onOpenTrash={() => setView('trash')} isOnline={isOnline} /> :
+                  <ChantierDetailView />}
+          </Suspense>
+        </ErrorBoundary>
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       </div>
     </AppContext.Provider>

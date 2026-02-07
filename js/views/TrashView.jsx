@@ -3,8 +3,11 @@ import { ArrowLeft, Trash2, ArchiveRestore, AlertTriangle, AlertCircle, Clock } 
 import { Button, Card, StatusBanner } from "../ui.jsx";
 
 export const TrashView = ({ onBack, state, actions }) => {
-    const deletedItems = (state.chantiers || [])
-        .filter(c => c.deleted)
+    // SECURITY: Ensure array exists to avoid crash
+    const safeChantiers = Array.isArray(state?.chantiers) ? state.chantiers : [];
+
+    const deletedItems = safeChantiers
+        .filter(c => c && c.deleted)
         .sort((a, b) => (b.deletedAt || 0) - (a.deletedAt || 0));
 
     const [confirmEmpty, setConfirmEmpty] = useState(false);
