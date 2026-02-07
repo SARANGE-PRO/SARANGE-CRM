@@ -24,9 +24,9 @@ async function sendToGoogleSheets(chantier, products, htmlReport, onStatusChange
     const APPS_SCRIPT_URL = window.SARANGE_CONFIG?.APPS_SCRIPT_URL;
     const TIMEOUT_MS = 15000; // 15 secondes
 
-    if (!APPS_SCRIPT_URL) {
-        Logger.warn("URL Google Apps Script non configurée");
-        return { success: false, error: "Configuration manquante" };
+    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('your-script-id')) {
+        Logger.warn("URL Google Apps Script non configurée ou invalide");
+        return { success: false, error: "Configuration email manquante" };
     }
 
     // Préparer le payload

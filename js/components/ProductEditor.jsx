@@ -66,7 +66,7 @@ export const ProductEditor = ({ product: init, onSave, onCancel, isReadOnly = fa
                         </div>
                         <Input label="Localisation" value={p.room} onChange={hRm} placeholder="Ex: Cuisine" disabled={isReadOnly} />
                         {p.type === 'AUTRE' && <Input id="field-description" label="Description" value={p.description} onChange={v => up('description', v)} error={isE('description')} disabled={isReadOnly} />}
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Input id="field-largeurMm" label="Largeur (mm)" type="number" inputMode="decimal" step="any" pattern="[0-9]*" value={p.largeurMm} onChange={v => up('largeurMm', parseInt(v))} error={isE('largeurMm')} disabled={isReadOnly} />
                             <Input id="field-hauteurMm" label="Hauteur (mm)" type="number" inputMode="decimal" step="any" pattern="[0-9]*" value={p.hauteurMm} onChange={v => up('hauteurMm', parseInt(v))} error={isE('hauteurMm')} disabled={isReadOnly} />
                         </div>
