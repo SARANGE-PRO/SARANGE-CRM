@@ -1,62 +1,81 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sun, Moon, Settings, Search, Plus, MapPin, Phone, Mail, UserCheck, CheckCircle, AlertCircle, Clock, Copy, Trash2, Archive, Menu, LogOut, Cloud, CloudOff } from 'lucide-react';
-import { Button, Input, SelectToggle, Card } from "../ui.jsx";
+import { Sun, Moon, Settings, Search, Plus, MapPin, Phone, Mail, UserCheck, CheckCircle, AlertCircle, Clock, Copy, Trash2, Archive, Menu, LogOut, Cloud, CloudOff, Calendar, ArrowRight } from 'lucide-react';
+import { Button, Input, SelectToggle, Card, StatusBanner, AddressInput, SmartAddress } from "../ui.jsx";
 import { useApp } from "../context.js";
+import AddToCalendarBtn from "../components/AddToCalendarBtn.jsx";
+import { checkUrgency, downloadICS } from "../utils/calendar.js";
+import { PlanningModal } from "../components/PlanningModal.jsx";
 
-// Helper Internal Components
-export const AddressInput = ({ value, onChange }) => {
-    const [s, setS] = useState([]), [o, setO] = useState(false), r = useRef(null), d = useRef(null);
-    useEffect(() => { const h = e => { if (r.current && !r.current.contains(e.target)) setO(false) }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h) }, []);
-    const fA = async q => { try { const res = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=5`); if (res.ok) { const j = await res.json(); setS(j.features || []); setO(true) } } catch { } };
-    const h = (e) => { const v = e.target.value; onChange(v); if (d.current) clearTimeout(d.current); if (v.length > 3) d.current = setTimeout(() => fA(v), 300); else setO(false) };
-    const g = () => {
-        if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') { alert("Connexion non sécurisée : Localisation indisponible."); return }
-        if (navigator.geolocation) navigator.geolocation.getCurrentPosition(async p => { try { const rs = await fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${p.coords.longitude}&lat=${p.coords.latitude}`); const j = await rs.json(); if (j.features?.length) onChange(j.features[0].properties.label) } catch { } }, e => alert("Erreur GPS."))
-    };
-    return <div className="relative mb-4" ref={r}><label className="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">Adresse</label><div className="relative"><input className="w-full p-3 pl-10 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-brand-500 dark:bg-slate-900 dark:text-white" placeholder="Adresse..." value={value} onChange={h} /><MapPin size={18} className="absolute left-3 top-3.5 text-slate-400" /><button onClick={g} className="absolute right-2 top-2 p-1.5 text-brand-600 hover:bg-brand-50 rounded"><MapPin size={18} /></button></div>{o && s.length > 0 && <ul className="suggestions-list">{s.map(i => <li key={i.properties.id} onClick={() => { onChange(i.properties.label); setO(false) }} className="p-3 border-b dark:border-slate-700 hover:bg-brand-50 dark:hover:bg-slate-800 cursor-pointer flex flex-col group"><span className="font-medium text-sm text-slate-800 dark:text-slate-200">{i.properties.name}</span><span className="text-xs text-slate-500">{i.properties.postcode} {i.properties.city}</span></li>)}</ul>}</div>;
+// --- COMPONENTS ---
+
+const MobileNavTiles = ({ activeTab, onTabChange, counts }) => {
+    // CORRECTION ICI : Suppression de 'sticky top-[130px] z-30' et ajout de 'shrink-0'
+    // Cela permet au menu de rester fixe en haut du conteneur flex, tandis que la liste défile dessous proprement.
+    return (
+        <div className="lg:hidden grid grid-cols-3 gap-2 mb-4 shrink-0">
+            <button
+                onClick={() => onTabChange('TODO')}
+                className={`p-3 rounded-xl border transition-all flex flex-col items-center justify-center text-center gap-1
+                    ${activeTab === 'TODO' ? 'ring-2 ring-offset-1 ring-red-400 dark:ring-red-500 border-transparent' : 'border-red-100 dark:border-red-900/30'}
+                    bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400`}
+            >
+                <div className="text-2xl font-bold">{counts.todo}</div>
+                <div className="text-[10px] font-bold uppercase truncate w-full">À PLANIFIER</div>
+            </button>
+
+            <button
+                onClick={() => onTabChange('PLANNING')}
+                className={`p-3 rounded-xl border transition-all flex flex-col items-center justify-center text-center gap-1
+                      ${activeTab === 'PLANNING' ? 'ring-2 ring-offset-1 ring-brand-400 dark:ring-brand-500 border-transparent' : 'border-brand-100 dark:border-brand-900/30'}
+                      bg-brand-50 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400`}
+            >
+                <div className="text-2xl font-bold">{counts.planning}</div>
+                <div className="text-[10px] font-bold uppercase truncate w-full">PLANNING</div>
+            </button>
+
+            <button
+                onClick={() => onTabChange('DONE')}
+                className={`p-3 rounded-xl border transition-all flex flex-col items-center justify-center text-center gap-1
+                      ${activeTab === 'DONE' ? 'ring-2 ring-offset-1 ring-green-400 dark:ring-green-500 border-transparent' : 'border-green-100 dark:border-green-900/30'}
+                      bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400`}
+            >
+                <div className="text-2xl font-bold">{counts.done}</div>
+                <div className="text-[10px] font-bold uppercase truncate w-full">ENVOYÉS</div>
+            </button>
+        </div>
+    );
 };
 
-export const NewChantierModal = ({ onClose }) => {
-    const { addChantier } = useApp(), [f, setF] = useState({ client: '', adresse: '', typeContrat: 'FOURNITURE_SEULE', telephone: '', email: '', clientFinal: '', adresseFinale: '' });
-    const sub = () => { if (!f.client) return alert('Nom requis'); if (f.typeContrat === 'SOUS_TRAITANCE' && (!f.clientFinal || !f.adresseFinale)) return alert('Client final requis'); addChantier({ ...f, date: new Date().toISOString() }); onClose() };
-    return <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4 animate-fade-in"><Card className="w-full max-w-md p-6 shadow-2xl"><h2 className="text-xl font-bold mb-6 dark:text-white">Nouveau Dossier</h2><Input label="Nom Client" value={f.client} onChange={v => setF({ ...f, client: v })} placeholder="Ex: Entreprise BTP" /><AddressInput value={f.adresse} onChange={v => setF({ ...f, adresse: v })} /><div className="grid grid-cols-2 gap-4"><Input label="Tél" value={f.telephone} onChange={v => setF({ ...f, telephone: v })} type="tel" inputMode="tel" pattern="[0-9]*" /><Input label="Email" value={f.email} onChange={v => setF({ ...f, email: v })} type="email" inputMode="email" /></div><SelectToggle label="Contrat" value={f.typeContrat} onChange={v => setF({ ...f, typeContrat: v })} options={[{ label: 'Fourniture Seule', value: 'FOURNITURE_SEULE' }, { label: 'Fourniture & Pose', value: 'FOURNITURE_ET_POSE' }, { label: 'Sous-traitance', value: 'SOUS_TRAITANCE' }]} />{f.typeContrat === 'SOUS_TRAITANCE' && <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 mb-4 animate-fade-in"><h3 className="text-sm font-bold text-slate-500 mb-2 uppercase flex items-center"><UserCheck size={14} className="mr-1" /> Client Final</h3><Input label="Nom Final" value={f.clientFinal} onChange={v => setF({ ...f, clientFinal: v })} placeholder="Ex: Mme Michu" /><AddressInput value={f.adresseFinale} onChange={v => setF({ ...f, adresseFinale: v })} /></div>}<div className="flex gap-3 mt-6"><Button variant="secondary" onClick={onClose} className="flex-1">Annuler</Button><Button onClick={sub} className="flex-1">Créer</Button></div></Card></div>;
-};
-
-export const EditChantierModal = ({ chantier, onClose, onUpdate }) => {
-    const [f, setF] = useState({ ...chantier });
-    const sub = () => { if (!f.client) return alert('Nom requis'); if (f.typeContrat === 'SOUS_TRAITANCE' && (!f.clientFinal || !f.adresseFinale)) return alert('Client final requis'); onUpdate(f); onClose() };
-    return <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4 animate-fade-in"><Card className="w-full max-w-md p-6 shadow-2xl"><h2 className="text-xl font-bold mb-6 dark:text-white">Modifier</h2><Input label="Nom Client" value={f.client} onChange={v => setF({ ...f, client: v })} /><AddressInput value={f.adresse} onChange={v => setF({ ...f, adresse: v })} /><div className="grid grid-cols-2 gap-4"><Input label="Tél" value={f.telephone} onChange={v => setF({ ...f, telephone: v })} type="tel" inputMode="tel" pattern="[0-9]*" /><Input label="Email" value={f.email} onChange={v => setF({ ...f, email: v })} type="email" inputMode="email" /></div><SelectToggle label="Contrat" value={f.typeContrat} onChange={v => setF({ ...f, typeContrat: v })} options={[{ label: 'Fourniture Seule', value: 'FOURNITURE_SEULE' }, { label: 'Fourniture & Pose', value: 'FOURNITURE_ET_POSE' }, { label: 'Sous-traitance', value: 'SOUS_TRAITANCE' }]} />{f.typeContrat === 'SOUS_TRAITANCE' && <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 mb-4 animate-fade-in"><h3 className="text-sm font-bold text-slate-500 mb-2 uppercase flex items-center"><UserCheck size={14} className="mr-1" /> Client Final</h3><Input label="Nom Final" value={f.clientFinal} onChange={v => setF({ ...f, clientFinal: v })} /><AddressInput value={f.adresseFinale} onChange={v => setF({ ...f, adresseFinale: v })} /></div>}<div className="flex gap-3 mt-6"><Button variant="secondary" onClick={onClose} className="flex-1">Annuler</Button><Button onClick={sub} className="flex-1">Enregistrer</Button></div></Card></div>;
-};
-
-export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, isOnline }) => {
-    const { state, selectChantier, deleteChantier, duplicateChantier } = useApp();
+export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpenTrash, isOnline }) => {
+    const { state, selectChantier, deleteChantier, duplicateChantier, updateChantier, addChantier } = useApp();
     const [s, setS] = useState('');
-    const [m, setM] = useState(false);
+    const [m, setM] = useState(false); // New Modal
     const [menuOpen, setMenuOpen] = useState(false);
     const wrapperRef = useRef(null);
+    const [activeTab, setActiveTab] = useState('TODO'); // 'TODO', 'PLANNING', 'DONE'
 
-    useEffect(() => {
-        function handleClickOutside(event) {
-            if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
-                setMenuOpen(false);
+    // Planning logic
+    const [planningId, setPlanningId] = useState(null);
+    const handlePlanifier = (date) => {
+        if (planningId) {
+            updateChantier(planningId, { dateIntervention: date });
+            const chant = state.chantiers.find(c => c.id === planningId);
+            if (chant) {
+                try { downloadICS({ ...chant, dateIntervention: date }); } catch (e) { console.error("Auto-download ICS blocked", e); }
             }
+            setPlanningId(null);
         }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
-    }, [wrapperRef]);
+    };
 
-    const [filter, setFilter] = useState('all'); // 'all', 'draft', 'sent', 'archived'
-
-    // Compteurs
+    // Filter & Sort
+    const [showArchived, setShowArchived] = useState(false);
     const allChantiers = (state.chantiers || []).filter(c => !c.deleted);
-    const countAll = allChantiers.filter(c => !c.archived).length;
-    const countDraft = allChantiers.filter(c => !c.archived && (!c.sendStatus || c.sendStatus === 'DRAFT' || c.sendStatus === 'ERROR')).length;
-    const countSent = allChantiers.filter(c => !c.archived && c.sendStatus === 'SENT').length;
     const countArchived = allChantiers.filter(c => c.archived).length;
 
-    // Filtrage combiné (recherche + filtre statut)
+    // Urgency Check
+    const [urgencyCount, setUrgencyCount] = useState(0);
+    useEffect(() => { setUrgencyCount(checkUrgency(state.chantiers || [])); }, [state.chantiers]);
+
     const filt = allChantiers
         .filter(c =>
             c.client.toLowerCase().includes(s.toLowerCase()) ||
@@ -64,198 +83,317 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, isOnl
             (c.telephone && c.telephone.includes(s)) ||
             (c.email && c.email.toLowerCase().includes(s.toLowerCase()))
         )
-        .filter(c => {
-            if (filter === 'archived') return c.archived;
-            if (c.archived) return false;
-            if (filter === 'draft') return !c.sendStatus || c.sendStatus === 'DRAFT' || c.sendStatus === 'ERROR';
-            if (filter === 'sent') return c.sendStatus === 'SENT';
-            return true; // 'all'
-        });
+        .filter(c => showArchived ? c.archived : !c.archived);
 
-    // Helper pour afficher le badge de statut
-    const StatusBadge = ({ chantier }) => {
-        const status = chantier.sendStatus || 'DRAFT';
-        if (status === 'SENT') {
-            const d = chantier.sentAt ? new Date(chantier.sentAt) : null;
-            const dateStr = d ? `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}` : '';
-            return <div className="flex flex-col items-center gap-0.5"><CheckCircle size={20} className="text-green-500" /><span className="text-[10px] font-bold text-green-600 dark:text-green-400">{dateStr}</span></div>;
-        }
-        if (status === 'ERROR') return <div className="flex flex-col items-center gap-0.5"><AlertCircle size={20} className="text-red-500" /><span className="text-[10px] font-bold text-red-600 dark:text-red-400">Erreur</span></div>;
-        return <Clock size={20} className="text-orange-400" />;
+    // --- COLUMNS DATA ---
+
+    // 1. TODO: No date, Not sent
+    const todoChantiers = filt.filter(c => (!c.dateIntervention) && c.sendStatus !== 'SENT')
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    // 2. PLANNING: Date defined, Not sent
+    const plannedChantiers = filt.filter(c => c.dateIntervention && c.sendStatus !== 'SENT')
+        .sort((a, b) => new Date(a.dateIntervention).getTime() - new Date(b.dateIntervention).getTime());
+
+    // Grouping Logic for Planning
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const tomorrow = today + 86400000;
+    const nextWeek = today + (7 * 86400000);
+
+    const groups = {
+        today: [],
+        tomorrow: [],
+        week: [],
+        later: []
     };
 
-    // Tile cliquable
-    const FilterTile = ({ active, onClick, count, label, colorClass }) => (
-        <button
-            onClick={onClick}
-            className={`p-4 rounded-xl border transition-all text-left ${colorClass} ${active ? 'ring-2 ring-offset-2 ring-brand-500' : 'hover:scale-[1.02]'}`}
-        >
-            <div className="text-2xl font-bold">{count}</div>
-            <div className="text-xs font-medium">{label}</div>
-        </button>
-    );
+    plannedChantiers.forEach(c => {
+        const d = new Date(c.dateIntervention).getTime();
+        if (d >= today && d < tomorrow) groups.today.push(c);
+        else if (d >= tomorrow && d < tomorrow + 86400000) groups.tomorrow.push(c);
+        else if (d >= tomorrow + 86400000 && d < nextWeek) groups.week.push(c);
+        else groups.later.push(c);
+    });
+
+    // 3. DONE: Sent
+    const doneChantiers = filt.filter(c => c.sendStatus === 'SENT')
+        .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
+
+
+    // --- RENDER HELPERS ---
+
+    const ChantierCard = ({ c, isTodo = false }) => {
+        const isUrgent = (!c.dateIntervention && c.sendStatus !== 'SENT') && (Date.now() - new Date(c.date).getTime() > 5 * 24 * 60 * 60 * 1000);
+        return (
+            <div
+                onClick={() => selectChantier(c.id)}
+                className={`relative group bg-white dark:bg-slate-900 p-4 rounded-xl border shadow-sm hover:shadow-md active:scale-[0.99] transition-all cursor-pointer overflow-hidden mb-3
+                    ${c.sendStatus === 'SENT' ? 'border-green-200 dark:border-green-800 opacity-75 hover:opacity-100' :
+                        isUrgent ? 'border-red-400 dark:border-red-500 ring-1 ring-red-400 dark:ring-red-500' :
+                            'border-slate-200 dark:border-slate-800 hover:border-brand-400 dark:hover:border-brand-600'}
+                `}
+            >
+                {isUrgent && <div className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">URGENT</div>}
+
+                <div className="flex justify-between items-start mb-2">
+                    <div className="font-bold text-lg dark:text-white truncate pr-2">{c.client}</div>
+                    {c.sendStatus === 'SENT' && <CheckCircle size={16} className="text-green-500" />}
+                </div>
+
+                <div className="text-sm text-slate-500 mb-3 ml-[-5px]">
+                    <SmartAddress address={c.adresse} gps={c.gps} />
+                </div>
+
+                {/* Info Date/Tel */}
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 flex items-center justify-between mb-3 text-sm">
+                    {c.dateIntervention ? (
+                        <div className="flex flex-col">
+                            <span className="text-[10px] text-slate-400 uppercase font-bold">Intervention</span>
+                            <span className="font-bold text-brand-600 dark:text-brand-400 flex items-center gap-1">
+                                <Calendar size={14} />
+                                {new Date(c.dateIntervention).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
+                            </span>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col">
+                            <span className="text-[10px] text-slate-400 uppercase font-bold">Créé le</span>
+                            <span className="font-bold text-slate-600 dark:text-slate-300">
+                                {new Date(c.date).toLocaleDateString('fr-FR')}
+                            </span>
+                        </div>
+                    )}
+                    {c.telephone && (
+                        <a href={`tel:${c.telephone}`} onClick={e => e.stopPropagation()} className="bg-white dark:bg-slate-700 p-2 rounded-full text-slate-600 dark:text-slate-300 shadow-sm border border-slate-100 dark:border-slate-600 hover:text-brand-600 hover:border-brand-600 transition-colors">
+                            <Phone size={16} />
+                        </a>
+                    )}
+                </div>
+
+                {/* Actions Specific for TODO */}
+                {isTodo && (
+                    <div className="flex gap-2 mt-2">
+                        <Button
+                            className="flex-1 py-2 text-xs bg-brand-600 text-white shadow-md hover:bg-brand-700 h-10"
+                            onClick={(e) => { e.stopPropagation(); setPlanningId(c.id); }}
+                            icon={Calendar}
+                        >
+                            PLANIFIER
+                        </Button>
+                    </div>
+                )}
+
+                <div className="flex items-center justify-end pt-2 mt-2 border-t border-slate-100 dark:border-slate-800 gap-2">
+                    <button onClick={(e) => { e.stopPropagation(); duplicateChantier(c.id) }} className="text-slate-400 hover:text-brand-500"><Copy size={16} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); if (confirm('Supprimer ?')) deleteChantier(c.id) }} className="text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>
+                </div>
+            </div>
+        );
+    };
+
+    const PlanningGroup = ({ title, items, color }) => {
+        if (items.length === 0) return null;
+        return (
+            <div className="mb-4">
+                <h4 className={`text-xs font-bold uppercase tracking-wider mb-2 ${color}`}>{title}</h4>
+                {items.map(c => <ChantierCard key={c.id} c={c} />)}
+            </div>
+        );
+    };
+
+    // --- MAIN RENDER ---
 
     return (
         <>
-            <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-20 px-4 pb-3 safe-top-padding">
-                <div className="flex justify-between items-center mb-4 max-w-5xl mx-auto">
+            <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 px-4 pb-3 safe-top-padding shadow-sm">
+                <div className="flex justify-between items-center mb-4 max-w-[1400px] mx-auto pt-2">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold">S</div>
+                        <img src="/favicon-512.png" alt="Logo" className="w-8 h-8 object-contain rounded-lg" />
                         <h1 className="text-xl font-bold tracking-tight">Sarange<span className="text-brand-600">Pro</span></h1>
                     </div>
                     <div className="flex gap-2 relative" ref={wrapperRef}>
-                        {/* Indicateur Firebase */}
-                        {isOnline ? (
-                            <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-full" title="Synchronisé">
-                                <Cloud size={20} className="text-green-500" />
-                            </div>
-                        ) : (
-                            <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full" title="Hors ligne">
-                                <CloudOff size={20} className="text-slate-400" />
-                            </div>
-                        )}
-
+                        {isOnline ? (<div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-full"><Cloud size={20} className="text-green-500" /></div>) : (<div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full"><CloudOff size={20} className="text-slate-400" /></div>)}
                         <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                             <Menu size={20} />
                         </button>
-
                         {menuOpen && (
                             <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-50 animate-fade-in origin-top-right">
                                 <div className="p-2 space-y-1">
-                                    <button
-                                        onClick={() => { toggleDark(); }}
-                                        className="w-full flex items-center px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                                    >
-                                        {isDark ? <Sun size={16} className="mr-3 text-orange-400" /> : <Moon size={16} className="mr-3 text-brand-600" />}
-                                        {isDark ? 'Mode Clair' : 'Mode Sombre'}
-                                    </button>
-                                    <button
-                                        onClick={() => { setFilter('archived'); setMenuOpen(false); }}
-                                        className={`w-full flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${filter === 'archived' ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-300' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
-                                    >
-                                        <Archive size={16} className="mr-3" />
-                                        Archives
-                                        <span className="ml-auto text-xs bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded-full">{countArchived}</span>
-                                    </button>
+                                    <button onClick={toggleDark} className="w-full flex items-center px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors">{isDark ? <Sun size={16} className="mr-3 text-orange-400" /> : <Moon size={16} className="mr-3 text-brand-600" />}{isDark ? 'Mode Clair' : 'Mode Sombre'}</button>
                                     <div className="h-px bg-slate-100 dark:bg-slate-700 my-1"></div>
-                                    <button
-                                        onClick={() => { onOpenSettings(); setMenuOpen(false); }}
-                                        className="w-full flex items-center px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                                    >
-                                        <Settings size={16} className="mr-3" />
-                                        Paramètres
-                                    </button>
+                                    <button onClick={() => { setShowArchived(!showArchived); setMenuOpen(false); }} className={`w-full flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${showArchived ? 'bg-brand-50 text-brand-700' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50'}`}><Archive size={16} className="mr-3" />{showArchived ? 'Voir Dossiers Actifs' : 'Voir Archives'}<span className="ml-auto text-xs bg-slate-100 px-1.5 rounded-full">{countArchived}</span></button>
+                                    <button onClick={() => { onOpenTrash(); setMenuOpen(false); }} className="w-full flex items-center px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg"><Trash2 size={16} className="mr-3 text-red-500" />Corbeille</button>
+                                    <button onClick={() => { onOpenSettings(); setMenuOpen(false); }} className="w-full flex items-center px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg"><Settings size={16} className="mr-3" />Paramètres</button>
                                 </div>
                             </div>
                         )}
                     </div>
                 </div>
-                <div className="max-w-5xl mx-auto relative">
-                    <Search className="absolute left-3 top-3 text-slate-400" size={20} />
-                    <input className="w-full pl-10 p-2.5 bg-slate-100 dark:bg-slate-800 border-0 rounded-xl outline-none focus:ring-2 focus:ring-brand-500 dark:text-white transition-all" placeholder="Rechercher..." value={s} onChange={e => setS(e.target.value)} />
+                <div className="max-w-[1400px] mx-auto relative flex gap-2">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-3 text-slate-400" size={20} />
+                        <input className="w-full pl-10 p-2.5 bg-slate-100 dark:bg-slate-800 border-0 rounded-xl outline-none focus:ring-2 focus:ring-brand-500 dark:text-white transition-all shadow-inner" placeholder="Rechercher un dossier..." value={s} onChange={e => setS(e.target.value)} />
+                    </div>
+                    <Button onClick={() => setM(true)} icon={Plus} className="py-2 text-sm shadow-sm whitespace-nowrap px-4">Nouveau</Button>
                 </div>
             </header>
-            <main className="flex-1 p-4 max-w-5xl mx-auto w-full">
-                {/* Filtres cliquables */}
-                <div className="grid grid-cols-3 gap-3 mb-6">
-                    <FilterTile
-                        active={filter === 'all'}
-                        onClick={() => setFilter('all')}
-                        count={countAll}
-                        label="Dossiers"
-                        colorClass="bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/30 text-blue-600 dark:text-blue-400"
-                    />
-                    <FilterTile
-                        active={filter === 'draft'}
-                        onClick={() => setFilter('draft')}
-                        count={countDraft}
-                        label="En cours"
-                        colorClass="bg-orange-50 dark:bg-orange-900/20 border-orange-100 dark:border-orange-900/30 text-orange-600 dark:text-orange-400"
-                    />
-                    <FilterTile
-                        active={filter === 'sent'}
-                        onClick={() => setFilter('sent')}
-                        count={countSent}
-                        label="Envoyés"
-                        colorClass="bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-900/30 text-green-600 dark:text-green-400"
-                    />
-                </div>
 
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="font-bold text-slate-700 dark:text-slate-300">
-                        {filter === 'all' ? 'Tous les dossiers' : filter === 'draft' ? 'Dossiers en cours' : filter === 'sent' ? 'Dossiers envoyés' : 'Archives'}
-                    </h2>
-                    <Button onClick={() => setM(true)} icon={Plus} className="py-2 text-sm shadow-sm">Nouveau</Button>
-                </div>
+            <main className="flex-1 p-4 max-w-[1400px] mx-auto w-full h-[calc(100vh-140px)] overflow-hidden flex flex-col">
 
-                <div className="space-y-3">
-                    {filt.length === 0 && (
-                        <div className="text-center py-12 text-slate-400">
-                            <span className="text-4xl">📂</span>
-                            <p className="mt-2">Aucun dossier {filter !== 'all' ? 'dans cette catégorie' : ''}</p>
+                {/* Banner Notification Urgency */}
+                {urgencyCount > 0 && (
+                    <div className="mb-4 shrink-0">
+                        <StatusBanner variant="warning" icon={AlertCircle}>
+                            {urgencyCount} dossiers en attente de planification depuis +3 jours !
+                        </StatusBanner>
+                    </div>
+                )}
+
+                {/* MOBILE TILE NAVIGATION */}
+                <MobileNavTiles
+                    activeTab={activeTab}
+                    onTabChange={setActiveTab}
+                    counts={{ todo: todoChantiers.length, planning: plannedChantiers.length, done: doneChantiers.length }}
+                />
+
+                {/* KANBAN GRID */}
+                <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+
+                    {/* COL 1: À PLANIFIER */}
+                    <div className={`flex flex-col h-full ${activeTab === 'TODO' ? 'block' : 'hidden lg:flex'}`}>
+                        <div className="flex items-center justify-between mb-4 px-2 shrink-0">
+                            <h3 className="font-bold text-red-600 flex items-center gap-2">
+                                <AlertCircle size={20} />
+                                À PLANIFIER
+                                <span className="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full">{todoChantiers.length}</span>
+                            </h3>
                         </div>
-                    )}
-                    {filt.map(c => (
-                        <div
-                            key={c.id}
-                            onClick={() => selectChantier(c.id)}
-                            className={`group bg-white dark:bg-slate-900 p-4 rounded-xl border ${c.sendStatus === 'SENT' ? 'border-green-400 dark:border-green-600' : c.sendStatus === 'ERROR' ? 'border-red-400 dark:border-red-600' : c.typeContrat === 'SOUS_TRAITANCE' ? 'border-amber-400 dark:border-amber-600' : 'border-slate-200 dark:border-slate-800'} shadow-sm active:scale-[0.99] transition-all cursor-pointer hover:border-brand-400 dark:hover:border-brand-600 relative overflow-hidden`}
-                        >
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <h3 className="font-bold text-lg dark:text-white group-hover:text-brand-600 transition-colors">{c.client}</h3>
-                                    <div className="text-sm text-slate-500 flex items-center mt-1">
-                                        <a
-                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.adresse)}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            onClick={e => e.stopPropagation()}
-                                            className="hover:text-brand-600 mr-1"
-                                        >
-                                            <MapPin size={14} />
-                                        </a>
-                                        <span>{c.adresse}</span>
-                                    </div>
-                                    {(c.telephone || c.email) && (
-                                        <div className="flex flex-wrap gap-3 mt-2 text-xs text-slate-500">
-                                            {c.telephone && (
-                                                <div className="flex items-center">
-                                                    <a href={`tel:${c.telephone}`} onClick={e => e.stopPropagation()} className="hover:text-brand-600 mr-1">
-                                                        <Phone size={12} />
-                                                    </a>
-                                                    <span>{c.telephone}</span>
-                                                </div>
-                                            )}
-                                            {c.email && (
-                                                <div className="flex items-center">
-                                                    <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} className="hover:text-brand-600 mr-1">
-                                                        <Mail size={12} />
-                                                    </a>
-                                                    <span>{c.email}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                    {c.typeContrat === 'SOUS_TRAITANCE' && (
-                                        <div className="mt-2 text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200 px-2 py-1 rounded inline-flex items-center">
-                                            <UserCheck size={12} className="mr-1" /> Client Final : {c.clientFinal}
-                                        </div>
-                                    )}
-                                </div>
-                                <StatusBadge chantier={c} />
-                            </div>
-                            <div className="mt-4 flex justify-between items-center border-t border-slate-100 dark:border-slate-800 pt-3">
-                                <span className="text-xs font-mono text-slate-400">{new Date(c.date).toLocaleDateString()}</span>
-                                <div className="flex gap-3">
-                                    <button onClick={(e) => { e.stopPropagation(); duplicateChantier(c.id) }} className="text-slate-400 hover:text-brand-500"><Copy size={18} /></button>
-                                    <button onClick={(e) => { e.stopPropagation(); if (confirm('Supprimer ?')) deleteChantier(c.id) }} className="text-slate-400 hover:text-red-500"><Trash2 size={18} /></button>
-                                </div>
-                            </div>
+                        <div className="flex-1 overflow-y-auto pr-2 pb-20 custom-scrollbar">
+                            {todoChantiers.length === 0 ? (
+                                <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Aucun dossier en attente 🎉</div>
+                            ) : (
+                                todoChantiers.map(c => <ChantierCard key={c.id} c={c} isTodo={true} />)
+                            )}
                         </div>
-                    ))}
+                    </div>
+
+                    {/* COL 2: PLANNING */}
+                    <div className={`flex flex-col h-full ${activeTab === 'PLANNING' ? 'block' : 'hidden lg:flex'} lg:border-l lg:border-r lg:border-slate-100 lg:dark:border-slate-800 lg:px-6`}>
+                        <div className="flex items-center justify-between mb-4 px-2 shrink-0">
+                            <h3 className="font-bold text-brand-600 flex items-center gap-2">
+                                <Calendar size={20} />
+                                PLANNING
+                                <span className="bg-brand-100 text-brand-700 text-xs px-2 py-0.5 rounded-full">{plannedChantiers.length}</span>
+                            </h3>
+                        </div>
+                        <div className="flex-1 overflow-y-auto pr-2 pb-20 custom-scrollbar">
+                            {plannedChantiers.length === 0 ? (
+                                <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Planning vide 😴</div>
+                            ) : (
+                                <>
+                                    <PlanningGroup title="Aujourd'hui" items={groups.today} color="text-green-600" />
+                                    <PlanningGroup title="Demain" items={groups.tomorrow} color="text-blue-600" />
+                                    <PlanningGroup title="Cette semaine" items={groups.week} color="text-brand-600" />
+                                    <PlanningGroup title="Plus tard" items={groups.later} color="text-slate-500" />
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* COL 3: ENVOYÉS */}
+                    <div className={`flex flex-col h-full ${activeTab === 'DONE' ? 'block' : 'hidden lg:flex'}`}>
+                        <div className="flex items-center justify-between mb-4 px-2 shrink-0">
+                            <h3 className="font-bold text-green-600 flex items-center gap-2">
+                                <CheckCircle size={20} />
+                                ENVOYÉS
+                                <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">{doneChantiers.length}</span>
+                            </h3>
+                        </div>
+                        <div className="flex-1 overflow-y-auto pr-2 pb-20 custom-scrollbar">
+                            {doneChantiers.length === 0 ? (
+                                <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Aucun dossier envoyé</div>
+                            ) : (
+                                doneChantiers.map(c => <ChantierCard key={c.id} c={c} />)
+                            )}
+                        </div>
+                    </div>
+
                 </div>
             </main>
+
             {m && <NewChantierModal onClose={() => setM(false)} />}
+            {planningId && <PlanningModal onClose={() => setPlanningId(null)} onConfirm={handlePlanifier} />}
         </>
+    );
+};
+
+// Re-integrate Modals with new features
+export const NewChantierModal = ({ onClose }) => {
+    const { addChantier } = useApp(), [f, setF] = useState({ client: '', adresse: '', gps: null, typeContrat: 'FOURNITURE_SEULE', telephone: '', email: '', clientFinal: '', adresseFinale: '' });
+
+    const setAddr = (v, field = 'adresse') => {
+        if (typeof v === 'object') setF({ ...f, [field]: v.address, gps: v.gps });
+        else setF({ ...f, [field]: v });
+    };
+
+    const sub = () => { if (!f.client) return alert('Nom requis'); if (f.typeContrat === 'SOUS_TRAITANCE' && (!f.clientFinal || !f.adresseFinale)) return alert('Client final requis'); addChantier({ ...f, date: new Date().toISOString() }); onClose() };
+
+    return <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4 animate-fade-in"><Card className="w-full max-w-md p-6 shadow-2xl"><h2 className="text-xl font-bold mb-6 dark:text-white">Nouveau Dossier</h2><Input label="Nom Client" value={f.client} onChange={v => setF({ ...f, client: v })} placeholder="Ex: Entreprise BTP" /><AddressInput value={f.adresse} onChange={v => setAddr(v, 'adresse')} /><div className="grid grid-cols-2 gap-4"><Input label="Tél" value={f.telephone} onChange={v => setF({ ...f, telephone: v })} type="tel" inputMode="tel" pattern="[0-9]*" /><Input label="Email" value={f.email} onChange={v => setF({ ...f, email: v })} type="email" inputMode="email" /></div><SelectToggle label="Contrat" value={f.typeContrat} onChange={v => setF({ ...f, typeContrat: v })} options={[{ label: 'Fourniture Seule', value: 'FOURNITURE_SEULE' }, { label: 'Fourniture & Pose', value: 'FOURNITURE_ET_POSE' }, { label: 'Sous-traitance', value: 'SOUS_TRAITANCE' }]} />{f.typeContrat === 'SOUS_TRAITANCE' && <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 mb-4 animate-fade-in"><h3 className="text-sm font-bold text-slate-500 mb-2 uppercase flex items-center"><UserCheck size={14} className="mr-1" /> Client Final</h3><Input label="Nom Final" value={f.clientFinal} onChange={v => setF({ ...f, clientFinal: v })} placeholder="Ex: Mme Michu" /><AddressInput value={f.adresseFinale} onChange={v => setAddr(v, 'adresseFinale')} /></div>}<div className="flex gap-3 mt-6"><Button variant="secondary" onClick={onClose} className="flex-1">Annuler</Button><Button onClick={sub} className="flex-1">Créer</Button></div></Card></div>;
+};
+
+export const EditChantierModal = ({ chantier, onClose, onUpdate }) => {
+    const [f, setF] = useState({ ...chantier });
+    const sub = () => { if (!f.client) return alert('Nom requis'); if (f.typeContrat === 'SOUS_TRAITANCE' && (!f.clientFinal || !f.adresseFinale)) return alert('Client final requis'); onUpdate(f); onClose() };
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4 animate-fade-in">
+            <Card className="w-full max-w-md p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-start mb-6">
+                    <h2 className="text-xl font-bold dark:text-white">Modifier le dossier</h2>
+                    <AddToCalendarBtn chantier={f} />
+                </div>
+
+                <div className="space-y-4">
+                    {/* Status & Date */}
+                    <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <label className="block text-sm font-bold text-slate-500 mb-2 uppercase">Planification</label>
+                        <Input
+                            label="Date d'intervention"
+                            type="datetime-local"
+                            value={f.dateIntervention || ''}
+                            onChange={v => setF({ ...f, dateIntervention: v })}
+                        />
+                        <p className="text-xs text-slate-400 mt-2">
+                            {f.dateIntervention
+                                ? "✅ Ce dossier passera en PLANNING"
+                                : "⚠️ Sans date, ce dossier reste en À PLANIFIER"}
+                        </p>
+                    </div>
+
+                    <Input label="Nom Client" value={f.client} onChange={v => setF({ ...f, client: v })} />
+                    <AddressInput value={f.adresse} onChange={v => typeof v === 'object' ? setF({ ...f, adresse: v.address, gps: v.gps }) : setF({ ...f, adresse: v })} />
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input label="Tél" value={f.telephone} onChange={v => setF({ ...f, telephone: v })} type="tel" inputMode="tel" pattern="[0-9]*" />
+                        <Input label="Email" value={f.email} onChange={v => setF({ ...f, email: v })} type="email" inputMode="email" />
+                    </div>
+
+                    <SelectToggle label="Contrat" value={f.typeContrat} onChange={v => setF({ ...f, typeContrat: v })} options={[{ label: 'Fourniture Seule', value: 'FOURNITURE_SEULE' }, { label: 'Fourniture & Pose', value: 'FOURNITURE_ET_POSE' }, { label: 'Sous-traitance', value: 'SOUS_TRAITANCE' }]} />
+
+                    {f.typeContrat === 'SOUS_TRAITANCE' && (
+                        <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800 animate-fade-in">
+                            <h3 className="text-xs font-bold text-amber-600 dark:text-amber-400 mb-2 uppercase flex items-center"><UserCheck size={14} className="mr-1" /> Client Final</h3>
+                            <Input label="Nom Final" value={f.clientFinal} onChange={v => setF({ ...f, clientFinal: v })} />
+                            <AddressInput value={f.adresseFinale} onChange={v => setF({ ...f, adresseFinale: v })} />
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex gap-3 mt-6">
+                    <Button variant="secondary" onClick={onClose} className="flex-1">Annuler</Button>
+                    <Button onClick={sub} className="flex-1">Enregistrer</Button>
+                </div>
+            </Card>
+        </div>
     );
 };

@@ -5,18 +5,19 @@ import { Spinner } from "./ui.jsx";
 
 // Firebase imports
 import { db, auth, googleProvider } from "../src/firebase.js";
-import { ref, set, get, child, update } from "firebase/database";
+import { ref, set, get, child, update, remove } from "firebase/database";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 
 import { DB, Logger } from "./db.js";
 import { generateUUID, mergeArraysSecure } from "./utils.js";
-import { Button } from "./ui.jsx";
+import { Button, Toast } from "./ui.jsx";
 import { AppContext } from "./context.js";
 
 // Vues
 const DashboardView = React.lazy(() => import("./views/DashboardView.jsx").then(m => ({ default: m.DashboardView })));
 const ChantierDetailView = React.lazy(() => import("./views/ChantierDetailView.jsx").then(m => ({ default: m.ChantierDetailView })));
 const SettingsView = React.lazy(() => import("./views/SettingsView.jsx").then(m => ({ default: m.SettingsView })));
+const TrashView = React.lazy(() => import("./views/TrashView.jsx").then(m => ({ default: m.TrashView })));
 
 const ALLOWED_EMAILS = ['contact@sarange.fr'];
 
@@ -101,6 +102,9 @@ const App = () => {
   const [view, setView] = useState('list');
   const [dark, setDark] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, type = 'success') => setToast({ message: msg, type });
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -158,9 +162,12 @@ const App = () => {
 
       // Auto-archive logic (sur la donnée finale)
       const TEN_DAYS = 10 * 24 * 60 * 60 * 1000;
+      const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
       const now = Date.now();
       let changed = false;
+
       if (finalData.chantiers) {
+        // 1. Auto-Archive (Ancien code)
         finalData.chantiers = finalData.chantiers.map(c => {
           const d = new Date(c.date).getTime();
           if (!c.deleted && !c.archived && (now - d > TEN_DAYS)) {
@@ -169,8 +176,28 @@ const App = () => {
           }
           return c;
         });
+
+        // 2. Auto-Hard-Delete (Trash Cleaner) - SAFETY CHECK: Only if online to avoid sync issues
+        if (navigator.onLine) {
+          const initialCount = finalData.chantiers.length;
+          const keptChantiers = [];
+
+          for (const c of finalData.chantiers) {
+            // Si supprimé (soft) ET dépassé 30 jours -> Hard Delete immédiat
+            if (c.deleted && c.deletedAt && (now - c.deletedAt > THIRTY_DAYS)) {
+              // Suppression physique Firebase
+              remove(ref(db, 'sarange_root/chantiers/' + c.id)).catch(e => Logger.error("Auto-Delete Fail", e));
+              Logger.info(`🗑️ Auto-Clean: ${c.client} (Deleted > 30j)`);
+              changed = true;
+              // On ne l'ajoute pas à keptChantiers, donc il disparaît du state local aussi
+            } else {
+              keptChantiers.push(c);
+            }
+          }
+          finalData.chantiers = keptChantiers;
+        }
       }
-      if (changed) Logger.info("Auto-archived old chantiers");
+      if (changed) Logger.info("Auto-maintenance performed");
 
       setSt(finalData);
 
@@ -248,13 +275,63 @@ const App = () => {
   }, [dark]);
 
   const act = {
-    addChantier: c => setSt(s => ({ ...s, chantiers: [{ ...c, id: generateUUID(), updatedAt: new Date().toISOString() }, ...s.chantiers] })),
+    addChantier: c => {
+      setSt(s => ({ ...s, chantiers: [{ ...c, id: generateUUID(), updatedAt: new Date().toISOString() }, ...s.chantiers] }));
+      showToast("Dossier créé");
+    },
     updateChantier: (id, d) => setSt(s => ({ ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, ...d, updatedAt: new Date().toISOString() } : x) })),
-    deleteChantier: id => setSt(s => ({ ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, deleted: true, updatedAt: new Date().toISOString() } : x) })),
+
+    // Soft Delete (Corbeille)
+    deleteChantier: id => {
+      setSt(s => ({ ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, deleted: true, deletedAt: Date.now(), updatedAt: new Date().toISOString() } : x) }));
+      showToast("Dossier mis à la corbeille");
+    },
+
+    // Restore from Trash
+    restoreChantier: id => {
+      setSt(s => ({ ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, deleted: false, deletedAt: null, updatedAt: new Date().toISOString() } : x) }));
+      showToast("Dossier restauré");
+    },
+
+    // Hard Delete (Définitif)
+    hardDeleteChantier: async id => {
+      // Optimistic UI update
+      setSt(s => ({ ...s, chantiers: s.chantiers.filter(x => x.id !== id) }));
+      // Physical delete on Firebase
+      try {
+        await remove(ref(db, 'sarange_root/chantiers/' + id));
+        showToast("Dossier supprimé définitivement");
+      } catch (e) {
+        console.error(e);
+        showToast("Erreur suppression", "error");
+      }
+    },
+
+    // Vide toute la corbeille
+    emptyTrash: async () => {
+      const toDelete = st.chantiers.filter(c => c.deleted);
+      if (toDelete.length === 0) return;
+
+      if (!confirm(`Supprimer définitivement ${toDelete.length} dossiers ?`)) return;
+
+      // Optimistic UI
+      setSt(s => ({ ...s, chantiers: s.chantiers.filter(c => !c.deleted) }));
+
+      // Background delete
+      let success = 0;
+      for (const c of toDelete) {
+        try {
+          await remove(ref(db, 'sarange_root/chantiers/' + c.id));
+          success++;
+        } catch (e) { console.error(e); }
+      }
+      showToast(`${success} dossiers supprimés`);
+    },
+
     selectChantier: id => setSt(s => ({ ...s, currentChantierId: id })),
     saveProduct: p => setSt(s => { const now = new Date().toISOString(); const ex = s.products.find(x => x.id === p.id); return { ...s, products: ex ? s.products.map(x => x.id === p.id ? { ...p, dateMaj: now, updatedAt: now } : x) : [...s.products, { ...p, updatedAt: now }] } }),
     deleteProduct: id => setSt(s => ({ ...s, products: s.products.map(x => x.id === id ? { ...x, deleted: true, updatedAt: new Date().toISOString() } : x) })),
-    duplicateChantier: id => { const c = st.chantiers.find(x => x.id === id); if (!c) return; const nId = generateUUID(), nC = { ...c, id: nId, client: c.client + " (Copie)", date: new Date().toISOString(), updatedAt: new Date().toISOString(), dateFinalisation: null, sendStatus: 'DRAFT', sentAt: null, lastError: null }, cP = st.products.filter(p => p.chantierId === id && !p.deleted).map(p => ({ ...p, id: generateUUID(), chantierId: nId, updatedAt: new Date().toISOString() })); setSt(s => ({ ...s, chantiers: [nC, ...s.chantiers], products: [...s.products, ...cP] })) },
+    duplicateChantier: id => { const c = st.chantiers.find(x => x.id === id); if (!c) return; const nId = generateUUID(), nC = { ...c, id: nId, client: c.client + " (Copie)", date: new Date().toISOString(), updatedAt: new Date().toISOString(), dateFinalisation: null, sendStatus: 'DRAFT', sentAt: null, lastError: null }, cP = st.products.filter(p => p.chantierId === id && !p.deleted).map(p => ({ ...p, id: generateUUID(), chantierId: nId, updatedAt: new Date().toISOString() })); setSt(s => ({ ...s, chantiers: [nC, ...s.chantiers], products: [...s.products, ...cP] })); showToast("Dossier dupliqué"); },
     importData: (newData) => { setSt(newData); DB.set('sarange_root', newData).catch(e => console.error(e)); }
   };
 
@@ -275,8 +352,16 @@ const App = () => {
     <AppContext.Provider value={{ state: st, ...act }}>
       <div className="min-h-screen flex flex-col safe-pb">
         <Suspense fallback={<LoadingScreen />}>
-          {view === 'settings' ? <SettingsView onBack={() => setView('list')} state={st} onImport={act.importData} /> : !st.currentChantierId ? <DashboardView onNew={() => setView('new')} viewMode={view} setViewMode={setView} isDark={dark} toggleDark={() => setDark(!dark)} onOpenSettings={() => setView('settings')} isOnline={isOnline} /> : <ChantierDetailView />}
+          {view === 'settings' ?
+            <SettingsView onBack={() => setView('list')} state={st} onImport={act.importData} /> :
+            view === 'trash' ?
+              /* Lazy loading du TrashView qui sera créé juste après */
+              <TrashView onBack={() => setView('list')} state={st} actions={act} /> :
+              !st.currentChantierId ?
+                <DashboardView onNew={() => setView('new')} viewMode={view} setViewMode={setView} isDark={dark} toggleDark={() => setDark(!dark)} onOpenSettings={() => setView('settings')} onOpenTrash={() => setView('trash')} isOnline={isOnline} /> :
+                <ChantierDetailView />}
         </Suspense>
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       </div>
     </AppContext.Provider>
   );

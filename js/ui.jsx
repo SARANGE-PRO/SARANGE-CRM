@@ -1,6 +1,7 @@
-﻿import React from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
+import { MapPin, Navigation, CheckCircle, AlertCircle, AlertTriangle, Lock, Unlock, Edit, Calendar, Clock, Plus, Trash2, Copy, Send, UserCheck, Search, Settings, Archive, Cloud, CloudOff, Sun, Moon, Menu } from 'lucide-react';
 
-const cn = (...parts) => parts.filter(Boolean).join(' ');
+export const cn = (...parts) => parts.filter(Boolean).join(' ');
 
 export const Button = ({
   onClick,
@@ -59,6 +60,7 @@ export const Input = ({
   id,
   className = '',
   disabled = false,
+  min
 }) =>
   React.createElement(
     'div',
@@ -83,6 +85,7 @@ export const Input = ({
       inputMode,
       pattern,
       disabled,
+      min,
       className: cn(
         'w-full p-3 rounded-xl bg-white dark:bg-slate-900 border outline-none transition-all dark:text-white focus:ring-4',
         error
@@ -100,24 +103,16 @@ export const SelectToggle = ({ options, value, onChange, label, error, id, class
   React.createElement(
     'div',
     { className: cn('mb-4', className), id },
-    React.createElement(
-      'label',
-      {
-        className: cn(
-          'block text-sm font-medium mb-2',
-          error ? 'text-red-600' : 'text-slate-700 dark:text-slate-300',
-        ),
-      },
-      `${label}${error ? ' *' : ''}`,
-    ),
+    label
+      ? React.createElement(
+        'label',
+        { className: 'block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300' },
+        label,
+      )
+      : null,
     React.createElement(
       'div',
-      {
-        className: cn(
-          'flex flex-wrap gap-2 p-1 rounded-xl',
-          error ? 'border border-red-200 bg-red-50' : '',
-        ),
-      },
+      { className: 'flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl' },
       options.map((option) =>
         React.createElement(
           'button',
@@ -125,173 +120,281 @@ export const SelectToggle = ({ options, value, onChange, label, error, id, class
             key: option.value,
             type: 'button',
             onClick: () => !disabled && onChange(option.value),
-            disabled,
+            disabled: disabled,
             className: cn(
-              'px-3 py-2 rounded-xl text-sm font-medium border transition-all',
+              'flex-1 py-2 px-3 text-sm font-medium rounded-lg transition-all',
               value === option.value
-                ? 'bg-brand-600 text-white border-brand-600 shadow-lg shadow-brand-500/25'
-                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
-              disabled && 'opacity-50 cursor-not-allowed',
+                ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
+              disabled && 'opacity-50 cursor-not-allowed'
             ),
           },
           option.label,
         ),
       ),
     ),
+    error
+      ? React.createElement('span', { className: 'text-xs text-red-500 mt-1 block' }, 'Requis')
+      : null,
   );
 
-export const Card = ({ className = '', children, ...rest }) =>
+export const Card = ({ children, className = '', onClick }) =>
   React.createElement(
     'div',
     {
-      className: cn('bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm', className),
-      ...rest,
+      onClick,
+      className: cn(
+        'bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden',
+        className,
+      ),
     },
     children,
   );
 
-// Spinner - Indicateur de chargement
-export const Spinner = ({ size = 20, className = '' }) =>
-  React.createElement('div', {
-    className: cn('animate-spin rounded-full border-2 border-current border-t-transparent', className),
-    style: { width: size, height: size }
-  });
+export const StatusBanner = ({ variant = 'info', icon: Icon, children, action, onAction }) => {
+  const styles = {
+    info: 'bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-900/30',
+    success: 'bg-green-50 text-green-700 border-green-100 dark:bg-green-900/20 dark:text-green-300 dark:border-green-900/30',
+    warning: 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-900/30',
+    error: 'bg-red-50 text-red-700 border-red-100 dark:bg-red-900/20 dark:text-red-300 dark:border-red-900/30',
+  };
 
-// Modal - Bottom Sheet sur mobile, Centrée sur tablette/desktop
+  return React.createElement(
+    'div',
+    { className: cn('px-4 py-3 border-b flex justify-between items-center text-sm font-medium', styles[variant]) },
+    React.createElement(
+      'div',
+      { className: 'flex items-center gap-2' },
+      Icon && React.createElement(Icon, { size: 16 }),
+      React.createElement('span', null, children),
+    ),
+    action &&
+    React.createElement(
+      'button',
+      {
+        onClick: onAction,
+        className: 'text-xs bg-white/50 hover:bg-white/80 px-2 py-1 rounded font-bold uppercase tracking-wider transition-colors',
+      },
+      action,
+    ),
+  );
+};
+
 export const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
   if (!isOpen) return null;
 
   const sizes = {
-    sm: 'max-w-sm',
-    md: 'max-w-md',
-    lg: 'max-w-lg',
-    full: 'max-w-full'
+    sm: 'max-w-md',
+    md: 'max-w-xl',
+    lg: 'max-w-3xl',
+    full: 'max-w-full m-4',
   };
 
   return React.createElement(
     'div',
-    {
-      className: 'fixed inset-0 z-50 flex items-end md:items-center justify-center',
-      onClick: (e) => e.target === e.currentTarget && onClose?.()
-    },
-    // Overlay
-    React.createElement('div', {
-      className: 'absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in'
-    }),
-    // Modal Content
+    { className: 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in' },
     React.createElement(
       'div',
       {
         className: cn(
-          'relative w-full bg-white dark:bg-slate-900 shadow-2xl',
-          'rounded-t-3xl md:rounded-2xl',
-          'max-h-[90vh] overflow-y-auto',
-          'animate-slide-up md:animate-fade-in',
-          sizes[size] || sizes.md,
-          'md:mx-4'
-        )
+          'bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full flex flex-col max-h-[90vh]',
+          sizes[size],
+        ),
       },
-      // Header avec titre et bouton fermer
-      title && React.createElement(
+      React.createElement(
         'div',
-        { className: 'sticky top-0 bg-white dark:bg-slate-900 px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center' },
-        React.createElement('h2', { className: 'text-xl font-bold dark:text-white' }, title),
-        onClose && React.createElement(
+        { className: 'px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center' },
+        React.createElement('h3', { className: 'font-bold text-lg dark:text-white' }, title),
+        React.createElement(
           'button',
           {
             onClick: onClose,
-            className: 'p-2 -mr-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400'
+            className: 'p-2 -mr-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 bg-slate-50 dark:bg-slate-800 rounded-full transition-colors',
           },
-          '✕'
-        )
+          '✕',
+        ),
       ),
-      // Body
-      React.createElement('div', { className: 'p-6' }, children)
-    )
+      React.createElement('div', { className: 'overflow-y-auto' }, children),
+    ),
   );
 };
 
-// StatusBanner - Bandeau d'état (header)
-export const StatusBanner = ({ variant = 'info', icon: Icon, children, action, onAction }) => {
-  const variants = {
-    success: 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 border-green-200 dark:border-green-800',
-    error: 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 border-red-200 dark:border-red-800',
-    warning: 'bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-800',
-    info: 'bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-800'
-  };
-
+export const Checkbox = ({ label, checked, onChange, disabled }) => {
   return React.createElement(
-    'div',
-    { className: cn('px-4 py-3 border-b flex items-center justify-between', variants[variant]) },
+    'label',
+    { className: cn('flex items-center gap-3 cursor-pointer group', disabled && 'opacity-50 cursor-not-allowed') },
     React.createElement(
       'div',
-      { className: 'flex items-center gap-2' },
-      Icon && React.createElement(Icon, { size: 18, className: 'shrink-0' }),
-      React.createElement('span', { className: 'text-sm font-medium' }, children)
+      {
+        className: cn(
+          'w-5 h-5 rounded border flex items-center justify-center transition-all',
+          checked
+            ? 'bg-brand-600 border-brand-600 text-white'
+            : 'bg-white border-slate-300 group-hover:border-brand-400',
+        ),
+      },
+      checked && React.createElement(
+        'svg',
+        {
+          xmlns: 'http://www.w3.org/2000/svg',
+          viewBox: '0 0 24 24',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: '3',
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+          className: 'w-3.5 h-3.5',
+        },
+        React.createElement('polyline', { points: '20 6 9 17 4 12' }),
+      )
     ),
-    action && React.createElement(
-      'button',
-      { onClick: onAction, className: 'text-xs font-bold uppercase opacity-80 hover:opacity-100 underline' },
-      action
-    )
+    React.createElement(
+      'input',
+      {
+        type: 'checkbox',
+        className: 'hidden',
+        checked,
+        onChange: (e) => !disabled && onChange(e.target.checked),
+        disabled,
+      }
+    ),
+    React.createElement('span', { className: 'text-sm text-slate-700 dark:text-slate-300 select-none' }, label)
   );
 };
 
-// Toast - Notification temporaire
+export const Spinner = ({ size = 'md', className = '' }) => {
+  const sizes = { sm: 'w-4 h-4', md: 'w-8 h-8', lg: 'w-12 h-12' };
+  return React.createElement('div', { className: cn('animate-spin rounded-full border-2 border-brand-600 border-t-transparent', sizes[size], className) });
+};
+
 export const Toast = ({ message, type = 'success', onClose }) => {
-  const types = {
-    success: 'bg-green-600 text-white',
-    error: 'bg-red-600 text-white',
-    info: 'bg-slate-800 text-white',
-    warning: 'bg-amber-500 text-white'
-  };
-
-  const icons = {
-    success: '✓',
-    error: '✕',
-    info: 'ℹ',
-    warning: '⚠'
-  };
-
-  React.useEffect(() => {
-    const timer = setTimeout(() => onClose?.(), 4000);
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
     return () => clearTimeout(timer);
   }, [onClose]);
 
+  const bg = type === 'error' ? 'bg-red-500' : 'bg-slate-800';
+
   return React.createElement(
     'div',
-    {
-      className: cn(
-        'fixed bottom-24 left-1/2 -translate-x-1/2 z-[60]',
-        'px-5 py-3 rounded-full shadow-xl',
-        'flex items-center gap-3',
-        'animate-fade-in',
-        types[type]
-      )
-    },
-    React.createElement('span', { className: 'text-lg' }, icons[type]),
+    { className: cn('fixed bottom-4 right-4 text-white px-6 py-3 rounded-xl shadow-xl z-50 animate-slide-up flex items-center gap-3', bg) },
+    type === 'success' && React.createElement(CheckCircle, { size: 20, className: 'text-green-400' }),
     React.createElement('span', { className: 'font-medium' }, message)
   );
 };
 
-// Checkbox - Case à cocher stylisée pour checklist
-export const Checkbox = ({ checked, onChange, label, className = '' }) =>
-  React.createElement(
-    'label',
-    {
-      className: cn(
-        'flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all min-h-[56px]',
-        checked
-          ? 'bg-brand-50 dark:bg-brand-900/20 border-brand-500 text-brand-700 dark:text-brand-300'
-          : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700',
-        className
-      )
-    },
-    React.createElement('input', {
-      type: 'checkbox',
-      checked: checked,
-      onChange: (e) => onChange?.(e.target.checked),
-      className: 'w-6 h-6 rounded-md accent-brand-600'
-    }),
-    React.createElement('span', { className: 'font-medium dark:text-white' }, label)
+/* --- NOUVEAU COMPOSANT : SmartAddress --- */
+export const SmartAddress = ({ address, gps, className = "" }) => {
+  const handleClick = (e) => {
+    e.stopPropagation(); // Empêche le clic de traverser vers la carte parent
+
+    let url = "";
+    // Si on a le GPS précis -> Lien qui force le point exact (Waze/Maps adorent)
+    if (gps && gps.lat && gps.lon) {
+      url = `https://www.google.com/maps/search/?api=1&query=${gps.lat},${gps.lon}`;
+    } else {
+      // Sinon recherche texte classique
+      url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+    }
+
+    window.open(url, '_blank');
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      className={`text-left hover:text-brand-600 hover:underline flex items-start group transition-colors ${className}`}
+      title="Ouvrir le GPS"
+    >
+      <MapPin size={14} className="mr-1 mt-0.5 shrink-0 text-slate-400 group-hover:text-brand-500" />
+      <span>{address}</span>
+    </button>
   );
+};
+
+/* --- MISE À JOUR : AddressInput (Capture GPS) --- */
+export const AddressInput = ({ value, onChange }) => {
+  const [s, setS] = useState([]);
+  const [o, setO] = useState(false);
+  const r = useRef(null);
+  const d = useRef(null);
+
+  useEffect(() => {
+    const h = e => { if (r.current && !r.current.contains(e.target)) setO(false) };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h)
+  }, []);
+
+  const fA = async q => {
+    try {
+      // On demande les coordonnées géométriques
+      const res = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=5`);
+      if (res.ok) {
+        const j = await res.json();
+        setS(j.features || []);
+        setO(true);
+      }
+    } catch { }
+  };
+
+  const h = (e) => {
+    const v = e.target.value;
+    // Si l'utilisateur tape manuellement, on envoie juste le texte (pas de GPS)
+    // Pour garder la compatibilité avec l'ancien code qui attendait juste un string :
+    // On vérifie si onChange attend un objet ou un string, mais pour la rétrocompatibilité
+    // on va ruser : on envoie le string, mais le parent devra gérer l'objet via la sélection
+    onChange(v);
+
+    if (d.current) clearTimeout(d.current);
+    if (v.length > 3) d.current = setTimeout(() => fA(v), 300);
+    else setO(false);
+  };
+
+  const handleSelect = (item) => {
+    const label = item.properties.label;
+    const coords = item.geometry.coordinates; // [long, lat] attention !
+
+    // On construit l'objet complet
+    const locationData = {
+      address: label,
+      gps: {
+        lon: coords[0],
+        lat: coords[1]
+      }
+    };
+
+    // IMPORTANT : On passe l'objet complet au parent.
+    // Le parent (NewChantierModal) devra détecter si c'est un objet ou string.
+    onChange(locationData);
+    setO(false);
+  };
+
+  return (
+    <div className="relative mb-4" ref={r}>
+      <label className="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">Adresse</label>
+      <div className="relative">
+        <input
+          className="w-full p-3 pl-10 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-brand-500 dark:bg-slate-900 dark:text-white"
+          placeholder="Saisir l'adresse..."
+          value={typeof value === 'object' ? value.address : value} // Gère le cas où value est un objet
+          onChange={h}
+        />
+        <MapPin size={18} className="absolute left-3 top-3.5 text-slate-400" />
+      </div>
+      {o && s.length > 0 && (
+        <ul className="absolute z-50 w-full bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg shadow-xl mt-1 max-h-60 overflow-auto">
+          {s.map(i => (
+            <li
+              key={i.properties.id}
+              onClick={() => handleSelect(i)}
+              className="p-3 border-b dark:border-slate-700 hover:bg-brand-50 dark:hover:bg-slate-700 cursor-pointer flex flex-col group"
+            >
+              <span className="font-medium text-sm text-slate-800 dark:text-slate-200">{i.properties.name}</span>
+              <span className="text-xs text-slate-500">{i.properties.postcode} {i.properties.city}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};

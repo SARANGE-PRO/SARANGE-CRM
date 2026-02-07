@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Edit, Lock, UserCheck, AlertCircle, Plus, Send, Unlock, Trash2, Copy, AlertTriangle, CheckCircle } from 'lucide-react';
-import { Button, Modal, Checkbox, Input, StatusBanner, Toast, Spinner } from "../ui.jsx";
+import { Button, Modal, Checkbox, Input, StatusBanner, Toast, Spinner, SmartAddress } from "../ui.jsx";
 import { useApp } from "../context.js";
+import { downloadICS } from "../utils/calendar.js";
 import { ProductEditor } from "../components/ProductEditor.jsx";
 import { EditChantierModal } from "./DashboardView.jsx";
 import { generateUUID, buildOptionsString } from "../utils.js";
@@ -263,6 +264,11 @@ const UnlockModal = ({ onClose, onUnlock }) => {
     );
 };
 
+import { StepsHeader } from "../components/StepsHeader.jsx";
+import { Calendar } from 'lucide-react'; // Ensure Calendar is imported
+
+// ... previous imports
+
 export const ChantierDetailView = () => {
     const { state, selectChantier, deleteProduct, saveProduct, updateChantier } = useApp();
     const [edt, setEdt] = useState(null);
@@ -276,11 +282,24 @@ export const ChantierDetailView = () => {
 
     const prds = (state.products || []).filter(p => p.chantierId === ch?.id && !p.deleted).sort((a, b) => a.index - b.index);
 
-    // État du chantier (fallback DRAFT pour anciens chantiers)
+    // État du chantier 
     const sendStatus = ch?.sendStatus || 'DRAFT';
     const isLocked = sendStatus === 'SENT';
     const isSending = sendStatus === 'SENDING';
     const hasError = sendStatus === 'ERROR';
+
+    // Logic for Quick Action Alert
+    const needsPlanning = !ch.dateIntervention && !isLocked;
+
+    // CALCUL DU STEP COURANT
+    // 1: Création (Toujours vrai si on est là)
+    // 2: Planification (Si dateIntervention définie)
+    // 3: Métrage (Si au moins 1 produit créé)
+    // 4: Envoyé (Si sendStatus === 'SENT')
+    let currentStep = 1;
+    if (ch.dateIntervention) currentStep = 2;
+    if (ch.dateIntervention && prds.length > 0) currentStep = 3;
+    if (isLocked) currentStep = 4;
 
     const addP = () => {
         if (isLocked) return;
@@ -299,7 +318,6 @@ export const ChantierDetailView = () => {
 
     const handleSendSuccess = () => {
         setShowConfirm(false);
-        // Toast supprimé car l'animation de succès dans la modal suffit
     };
 
     const handleSendError = (error) => {
@@ -322,28 +340,70 @@ export const ChantierDetailView = () => {
     return (
         <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-950">
             {/* Header */}
-            <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 pb-3 pt-3 safe-top-padding flex items-center justify-between sticky top-0 z-10 shadow-sm">
-                <div className="flex items-center flex-1 min-w-0">
-                    <button onClick={() => selectChantier(null)} className="mr-3 p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-200"><ArrowLeft size={24} /></button>
-                    <div className="truncate flex-1 cursor-pointer" onClick={() => !isLocked && setIed(true)}>
-                        <div className="flex items-center gap-2">
-                            <h2 className="font-bold text-lg dark:text-white truncate">{ch.client}</h2>
-                            {isLocked ? <Lock size={16} className="text-green-600" /> : <Edit size={16} className="text-slate-400" />}
-                        </div>
-                        <div className="text-xs text-slate-500 flex items-center gap-2">
-                            <span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{tot} Produit(s)</span>
-                            <span>• {ch.typeContrat === 'FOURNITURE_ET_POSE' ? 'Pose' : ch.typeContrat === 'SOUS_TRAITANCE' ? 'Sous-traitance' : 'Fourn. Seule'}</span>
+            <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10 shadow-sm safe-top-padding">
+                <div className="px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center flex-1 min-w-0">
+                        <button onClick={() => selectChantier(null)} className="mr-3 p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-200"><ArrowLeft size={24} /></button>
+                        <div className="truncate flex-1 cursor-pointer" onClick={() => !isLocked && setIed(true)}>
+                            <div className="flex items-center gap-2">
+                                <h2 className="font-bold text-lg dark:text-white truncate">{ch.client}</h2>
+                                {isLocked ? <Lock size={16} className="text-green-600" /> : <Edit size={16} className="text-slate-400" />}
+                            </div>
+                            <div className="text-xs text-slate-500 flex flex-col gap-1 mt-1">
+                                <SmartAddress address={ch.adresse} gps={ch.gps} className="text-slate-500 hover:text-brand-600" />
+                                <div className="flex items-center gap-2">
+                                    <span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{tot} Produit(s)</span>
+                                    <span>• {ch.typeContrat === 'FOURNITURE_ET_POSE' ? 'Pose' : ch.typeContrat === 'SOUS_TRAITANCE' ? 'Sous-traitance' : 'Fourn. Seule'}</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
+
+                {/* Stepper Integration */}
+                <StepsHeader currentStep={currentStep} />
             </div>
 
             {/* Status Banners */}
-            {isLocked && <StatusBanner variant="success" icon={Lock} action="Modifier" onAction={() => setShowUnlock(true)}>Dossier verrouillé le {new Date(ch.sentAt).toLocaleDateString('fr-FR')} à  {new Date(ch.sentAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</StatusBanner>}
+            {isLocked && <StatusBanner variant="success" icon={Lock} action="Modifier" onAction={() => setShowUnlock(true)}>Dossier verrouillé le {new Date(ch.sentAt).toLocaleDateString('fr-FR')} à  {new Date(ch.sentAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</StatusBanner>}
             {hasError && <StatusBanner variant="error" icon={AlertCircle}>Échec de l'envoi : {ch.lastError}</StatusBanner>}
 
             {/* Main Content */}
             <div className="flex-1 overflow-y-auto p-4 max-w-5xl mx-auto w-full pb-32">
+
+                {/* --- BLOC D'ACTION RAPIDE --- */}
+                {needsPlanning && (
+                    <div className="mb-6 bg-white dark:bg-slate-900 rounded-xl p-6 shadow-lg border-2 border-brand-500 animate-fade-in">
+                        <div className="flex items-start gap-4">
+                            <div className="bg-brand-100 dark:bg-brand-900/30 p-3 rounded-full text-brand-600 dark:text-brand-400 shrink-0">
+                                <Calendar size={32} />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-1">
+                                    Ce dossier n'est pas planifié !
+                                </h3>
+                                <p className="text-slate-500 text-sm mb-4">
+                                    Sélectionnez la date d'intervention pour passer à l'étape suivante.
+                                </p>
+
+                                <div className="flex gap-2">
+                                    <input
+                                        type="datetime-local"
+                                        className="flex-1 p-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:border-brand-500 outline-none font-bold text-slate-700 transition-colors"
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val) {
+                                                updateChantier(ch.id, { dateIntervention: val });
+                                                try { downloadICS({ ...ch, dateIntervention: val }); } catch (e) { }
+                                            }
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {ch.typeContrat === 'SOUS_TRAITANCE' && <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4 flex items-start"><UserCheck className="text-amber-600 mt-1 mr-3 shrink-0" size={20} /><div><div className="text-xs font-bold text-amber-800 dark:text-amber-200 uppercase">Client Final</div><div className="font-medium text-amber-900 dark:text-amber-100">{ch.clientFinal}</div><a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ch.adresseFinale)}`} target="_blank" rel="noopener noreferrer" className="text-sm text-amber-800 dark:text-amber-300 hover:underline flex items-center"><MapPin size={12} className="mr-1" />{ch.adresseFinale}</a></div></div>}
 
                 {/* Product Cards */}
