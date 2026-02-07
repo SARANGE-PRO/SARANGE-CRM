@@ -231,7 +231,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                 <div className="flex justify-between items-center mb-4 max-w-[1400px] mx-auto pt-2">
                     <div className="flex items-center gap-2">
                         <img src="/favicon-512.png" alt="Logo" className="w-8 h-8 object-contain rounded-lg" />
-                        <h1 className="text-xl font-bold tracking-tight">Sarange<span className="text-brand-600">Pro</span></h1>
+                        <h1 className="text-xl font-bold tracking-tight">Sarange<span className="text-brand-600">Metrage</span></h1>
                     </div>
                     <div className="flex gap-2 relative" ref={wrapperRef}>
                         {isOnline ? (<div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-full"><Cloud size={20} className="text-green-500" /></div>) : (<div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full"><CloudOff size={20} className="text-slate-400" /></div>)}
