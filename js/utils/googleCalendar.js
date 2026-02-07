@@ -1,179 +1,144 @@
 /* --- GOOGLE CALENDAR UTILITY --- */
 import { gapi } from 'gapi-script';
 
-// CONFIGURATION
 const CLIENT_ID = "699593246334-05mr710cpof5efgbgra54mpoog2ghma7.apps.googleusercontent.com";
 const API_KEY = "AIzaSyAFfQEdzncY0XpTfsuYikj7oVP6uLHj7PE";
+const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"];
 const SCOPES = "https://www.googleapis.com/auth/calendar";
-const CALENDAR_NAME = "Sarange - Métrages";
 
-let isInitialized = false;
+// Variable pour suivre l'état de l'initialisation
+let isGapiInitialized = false;
 
-/**
- * Initialisation du client Google API
- * À appeler au démarrage de l'app (App.js)
- */
 export const initCalendarClient = () => {
     return new Promise((resolve, reject) => {
-        gapi.load('client:auth2', () => {
-            gapi.client.init({
-                apiKey: API_KEY,
-                clientId: CLIENT_ID,
-                discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"],
-                scope: SCOPES,
-            }).then(() => {
-                isInitialized = true;
-                console.log("📅 Google Calendar Client Initialized");
-                resolve();
-            }).catch((err) => {
-                console.error("Erreur init Google Calendar", err);
-                reject(err);
-            });
+        // Si déjà initialisé, on ne refait pas
+        if (isGapiInitialized) return resolve(gapi.auth2.getAuthInstance());
+
+        gapi.load('client:auth2', async () => {
+            try {
+                await gapi.client.init({
+                    apiKey: API_KEY,
+                    clientId: CLIENT_ID,
+                    discoveryDocs: DISCOVERY_DOCS,
+                    scope: SCOPES,
+                    plugin_name: "SarangePro" // Aide à éviter certaines erreurs de doublons
+                });
+
+                isGapiInitialized = true;
+                console.log("📅 Google Calendar API : Initialisée avec succès");
+                resolve(gapi.auth2.getAuthInstance());
+            } catch (error) {
+                console.error("❌ Erreur critique init Google:", error);
+                // On ne reject pas forcément pour ne pas bloquer toute l'app, 
+                // mais on marque comme non initialisé
+                isGapiInitialized = false;
+                reject(error);
+            }
         });
     });
 };
 
-/**
- * Fonction Principale : Gère la synchro (Création ou Mise à jour)
- * @param {Object} chantier - L'objet chantier complet
- * @returns {Promise<string>} - L'ID de l'événement Google (ou null si échec)
- */
+const getOrCreateCalendarId = async (calendarName) => {
+    try {
+        const response = await gapi.client.calendar.calendarList.list();
+        const calendars = response.result.items;
+        const existing = calendars.find(c => c.summary === calendarName);
+
+        if (existing) return existing.id;
+
+        const createResponse = await gapi.client.calendar.calendars.insert({
+            resource: {
+                summary: calendarName,
+                description: "Agenda automatique SarangePro",
+                timeZone: "Europe/Paris"
+            }
+        });
+        return createResponse.result.id;
+    } catch (e) {
+        console.error("Erreur gestion agenda:", e);
+        // Fallback : on utilise l'agenda principal si on n'arrive pas à créer le spécifique
+        return 'primary';
+    }
+};
+
 export const manageGoogleEvent = async (chantier) => {
-    if (!isInitialized) {
-        console.warn("Client Calendar non initialisé. Tentative d'init...");
-        try {
-            await initCalendarClient();
-        } catch (e) { return null; }
+    // 1. Vérification de sécurité : est-ce que gapi est prêt ?
+    if (!gapi.auth2) {
+        console.warn("⚠️ GAPI non chargé, tentative de ré-init...");
+        await initCalendarClient();
     }
 
-    // 1. Authentification Silencieuse (ou demandée si nécessaire)
-    const GoogleAuth = gapi.auth2.getAuthInstance();
-    if (!GoogleAuth.isSignedIn.get()) {
+    const auth = gapi.auth2.getAuthInstance();
+
+    if (!auth) {
+        throw new Error("Impossible d'accéder à l'instance d'authentification Google.");
+    }
+
+    // 2. Connexion (si nécessaire)
+    if (!auth.isSignedIn.get()) {
+        console.log("🔒 Demande de connexion Google...");
         try {
-            await GoogleAuth.signIn(); // Ouvre la popup si pas connecté
-        } catch (e) {
-            console.warn("Utilisateur a refusé la connexion Google Agenda");
-            return null;
+            await auth.signIn();
+        } catch (err) {
+            // Si l'utilisateur ferme la popup ou erreur popup bloquée
+            console.warn("Connexion annulée ou bloquée", err);
+            return null; // On arrête là proprement sans crasher
         }
     }
 
-    // 2. Trouver ou Créer l'Agenda "Sarange - Métrages"
-    let calendarId = await getSarangeCalendarId();
-    if (!calendarId) {
-        calendarId = await createSarangeCalendar();
-    }
+    // 3. Logique Métrage vs Pose
+    const isMetrage = !chantier.datePose && chantier.status !== 'POSE';
+    const calendarName = isMetrage ? "Sarange - Métrages" : "Sarange - Pose";
+    const colorId = isMetrage ? "5" : "10"; // 5=Jaune, 10=Vert
+    const titre = `${isMetrage ? 'MÉTRAGE' : 'POSE'} : ${chantier.client}`;
 
-    if (!calendarId) return null; // Échec critique
+    // 4. Récupérer l'ID Agenda
+    const calendarId = await getOrCreateCalendarId(calendarName);
 
-    // 3. Préparer les données de l'événement
-    const eventResource = createEventResource(chantier);
+    // 5. Préparer l'événement
+    const startDateTime = new Date(chantier.dateIntervention);
+    const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // 1h
 
+    const eventResource = {
+        summary: titre,
+        location: chantier.adresse,
+        description: `Client: ${chantier.client}\nTél: ${chantier.telephone}\nLien GPS: https://waze.com/ul?q=${encodeURIComponent(chantier.adresse)}`,
+        start: { dateTime: startDateTime.toISOString(), timeZone: 'Europe/Paris' },
+        end: { dateTime: endDateTime.toISOString(), timeZone: 'Europe/Paris' },
+        colorId: colorId,
+        reminders: {
+            useDefault: false,
+            overrides: [
+                { method: 'popup', minutes: 1440 }, // 24h
+                { method: 'popup', minutes: 120 },  // 2h
+                { method: 'popup', minutes: 10 }    // 10 min
+            ]
+        }
+    };
+
+    // 6. Insert ou Update
     try {
         let response;
-        // 4. Update ou Insert
         if (chantier.googleEventId) {
-            // Tentative de mise à jour
-            try {
-                response = await gapi.client.calendar.events.update({
-                    calendarId: calendarId,
-                    eventId: chantier.googleEventId,
-                    resource: eventResource
-                });
-                console.log("📅 Événement mis à jour :", response.result.htmlLink);
-            } catch (e) {
-                // Si l'événement n'existe plus (404), on le recrée
-                if (e.status === 404) {
-                    console.warn("Événement introuvable, recréation...");
-                    response = await gapi.client.calendar.events.insert({
-                        calendarId: calendarId,
-                        resource: eventResource
-                    });
-                } else { throw e; }
-            }
+            // UPDATE
+            response = await gapi.client.calendar.events.update({
+                calendarId: calendarId,
+                eventId: chantier.googleEventId,
+                resource: eventResource
+            });
         } else {
-            // Création
+            // INSERT
             response = await gapi.client.calendar.events.insert({
                 calendarId: calendarId,
                 resource: eventResource
             });
-            console.log("📅 Événement créé :", response.result.htmlLink);
         }
 
+        console.log("✅ Synchro Google OK");
         return response.result.id;
 
     } catch (error) {
-        console.error("Erreur Sychro Calendar :", error);
+        console.error("❌ Erreur API Calendar:", error);
         return null;
     }
-};
-
-/**
- * Récupère l'ID de l'agenda dédié
- */
-const getSarangeCalendarId = async () => {
-    try {
-        const response = await gapi.client.calendar.calendarList.list();
-        const calendar = response.result.items.find(c => c.summary === CALENDAR_NAME);
-        return calendar ? calendar.id : null;
-    } catch (e) {
-        console.error("Erreur lecture agendas", e);
-        return null;
-    }
-};
-
-/**
- * Crée l'agenda dédié si inexistant
- */
-const createSarangeCalendar = async () => {
-    try {
-        const response = await gapi.client.calendar.calendars.insert({
-            resource: { summary: CALENDAR_NAME }
-        });
-        return response.result.id;
-    } catch (e) {
-        console.error("Erreur création agenda", e);
-        return null;
-    }
-};
-
-/**
- * Formate l'objet événement pour l'API Google
- */
-const createEventResource = (chantier) => {
-    // Date de début (Métrage)
-    const startDateTime = new Date(chantier.dateIntervention || new Date());
-    // Durée par défaut : 1h
-    const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
-
-    // Construction de la description
-    let description = `📞 Tél: ${chantier.telephone || 'Non renseigné'}\n`;
-    description += `📄 Contrat: ${chantier.typeContrat || 'Standard'}\n`;
-    if (chantier.address) {
-        const q = encodeURIComponent(chantier.address);
-        description += `🚗 Waze: https://waze.com/ul?q=${q}&navigate=yes\n`;
-        description += `🗺️ Maps: https://www.google.com/maps/search/?api=1&query=${q}`;
-    }
-
-    return {
-        summary: `MÉTRAGE : ${chantier.client || 'Client'}`,
-        location: chantier.address || '',
-        description: description,
-        start: {
-            dateTime: startDateTime.toISOString(),
-            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-        },
-        end: {
-            dateTime: endDateTime.toISOString(),
-            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-        },
-        colorId: '5', // Jaune (Yellow)
-        reminders: {
-            useDefault: false,
-            overrides: [
-                { method: 'email', minutes: 24 * 60 }, // 1 jour avant
-                { method: 'popup', minutes: 2 * 60 },  // 2 heures avant
-                { method: 'popup', minutes: 0 }        // Au moment même
-            ]
-        }
-    };
 };
