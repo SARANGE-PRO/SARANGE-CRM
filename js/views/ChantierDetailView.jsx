@@ -390,23 +390,38 @@ export const ChantierDetailView = () => {
                                     <input
                                         type="datetime-local"
                                         className="flex-1 p-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:border-brand-500 outline-none font-bold text-slate-700 transition-colors"
-                                        onChange={async (e) => {
-                                            const val = e.target.value;
-                                            if (val) {
-                                                // 1. Mise à jour locale
-                                                updateChantier(ch.id, { dateIntervention: val });
-
-                                                // 2. Synchro Google Calendar (Silent)
-                                                try {
-                                                    const updatedChantier = { ...ch, dateIntervention: val };
-                                                    const eventId = await manageGoogleEvent(updatedChantier);
-                                                    if (eventId) {
-                                                        updateChantier(ch.id, { googleEventId: eventId });
-                                                    }
-                                                } catch (e) { console.error(e); }
-                                            }
+                                        onChange={(e) => {
+                                            // iOS Fix: On ne sauvegarde plus directement au onChange !
+                                            // On stocke juste dans une variable locale si besoin, 
+                                            // mais ici on va utiliser directement la valeur de l'input au clic du bouton
+                                            // (Pas de state React inutile pour éviter re-render)
                                         }}
+                                        id={`date-picker-${ch.id}`}
                                     />
+                                    <Button
+                                        variant="primary"
+                                        className="font-bold uppercase"
+                                        onClick={async () => {
+                                            const input = document.getElementById(`date-picker-${ch.id}`);
+                                            const val = input?.value;
+
+                                            if (!val) return alert("Veuillez sélectionner une date !");
+
+                                            // 1. Mise à jour locale
+                                            updateChantier(ch.id, { dateIntervention: val });
+
+                                            // 2. Synchro Google Calendar (Silent)
+                                            try {
+                                                const updatedChantier = { ...ch, dateIntervention: val };
+                                                const eventId = await manageGoogleEvent(updatedChantier);
+                                                if (eventId) {
+                                                    updateChantier(ch.id, { googleEventId: eventId });
+                                                }
+                                            } catch (e) { console.error(e); }
+                                        }}
+                                    >
+                                        Valider
+                                    </Button>
                                 </div>
                             </div>
                         </div>
