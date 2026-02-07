@@ -85,7 +85,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
 
     // Filter & Sort
     const [showArchived, setShowArchived] = useState(false);
-    const allChantiers = (state.chantiers || []).filter(c => !c.deleted);
+    const allChantiers = (state.chantiers || []).filter(c => !c.deleted && !c.purged);
     const countArchived = allChantiers.filter(c => c.archived).length;
 
     // Urgency Check

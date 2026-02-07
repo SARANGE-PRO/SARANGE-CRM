@@ -106,7 +106,7 @@ export const buildOptionsString = (product) => {
 export const mergeArraysSecure = (cloudList = [], localList = []) => {
     const map = new Map();
 
-    // 1. On met tout le Cloud dans une "Map" (Tableau intelligent)
+    // 1. On met tout le Cloud dans une "Map"
     cloudList.forEach(item => {
         map.set(item.id, item);
     });
@@ -116,23 +116,24 @@ export const mergeArraysSecure = (cloudList = [], localList = []) => {
         const cloudItem = map.get(localItem.id);
 
         if (!cloudItem) {
-            // Cas A : N'existe pas dans le Cloud => C'est un nouveau chantier local => On l'ajoute
+            // Cas A : N'existe pas dans le Cloud => Nouveau local => On garde
             map.set(localItem.id, localItem);
         } else {
-            // Cas B : Existe dans les deux => CONFLIT !
-            // On compare les dates de modification (updatedAt)
+            // Cas B : Conflit => On compare les timestamps (updatedAt)
+            // Règle d'Or : Le plus récent gagne toujours (même si c'est un "purged") sur la base de la date de modif.
             const localTime = new Date(localItem.updatedAt || 0).getTime();
             const cloudTime = new Date(cloudItem.updatedAt || 0).getTime();
 
             if (localTime > cloudTime) {
-                // La version locale est plus récente (j'ai bossé hors ligne) => JE GAGNE
+                // Local est plus récent : Il gagne (même si c'est une suppression logique)
                 map.set(localItem.id, localItem);
             } else {
-                // Cloud gagne (défaut)
+                // Cloud est plus récent ou égal : Il gagne
+                // (Rien à faire, car cloudItem est déjà dans la Map)
             }
         }
     });
 
-    // On retransforme la Map en tableau
+    // On retourne tout (Y COMPRIS les items purgés, ils seront filtrés par les Vues)
     return Array.from(map.values());
 };

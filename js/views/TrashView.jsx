@@ -7,7 +7,7 @@ export const TrashView = ({ onBack, state, actions }) => {
     const safeChantiers = Array.isArray(state?.chantiers) ? state.chantiers : [];
 
     const deletedItems = safeChantiers
-        .filter(c => c && c.deleted)
+        .filter(c => c && c.deleted && !c.purged)
         .sort((a, b) => (b.deletedAt || 0) - (a.deletedAt || 0));
 
     const [confirmEmpty, setConfirmEmpty] = useState(false);

@@ -142,7 +142,7 @@ const App = () => {
           Logger.info("Vérification Cloud...");
           const snapshot = await get(child(ref(db), 'sarange_root'));
           if (snapshot.exists()) {
-            const cloudData = snapshot.val();
+            let cloudData = snapshot.val();
             // Normalisation cloud
             cloudData.chantiers = cloudData.chantiers ? Object.values(cloudData.chantiers) : [];
             cloudData.products = cloudData.products ? Object.values(cloudData.products) : [];
@@ -167,36 +167,35 @@ const App = () => {
         }
       }
 
-      // Auto-archive logic (sur la donnée finale)
-      const TEN_DAYS = 10 * 24 * 60 * 60 * 1000;
+      // --- MAINTENANCE TASK : GARBAGE COLLECTOR (TOMBSTONES) ---
       const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
       const now = Date.now();
       let changed = false;
 
       if (finalData.chantiers) {
-        // 1. Auto-Archive (Ancien code)
+        // 1. Auto-Archive (Ancien code conservé tel quel)
         finalData.chantiers = finalData.chantiers.map(c => {
           const d = new Date(c.date).getTime();
-          if (!c.deleted && !c.archived && (now - d > TEN_DAYS)) {
+          if (!c.deleted && !c.archived && (now - d > (10 * 24 * 60 * 60 * 1000))) {
             changed = true;
             return { ...c, archived: true };
           }
           return c;
         });
 
-        // 2. Auto-Hard-Delete (Trash Cleaner) - SAFETY CHECK: Only if online to avoid sync issues
+        // 2. GARBAGE COLLECTOR (Suppression Physique des Tombstones > 30j)
         if (navigator.onLine) {
-          const initialCount = finalData.chantiers.length;
           const keptChantiers = [];
-
           for (const c of finalData.chantiers) {
-            // Si supprimé (soft) ET dépassé 30 jours -> Hard Delete immédiat
-            if (c.deleted && c.deletedAt && (now - c.deletedAt > THIRTY_DAYS)) {
-              // Suppression physique Firebase
-              remove(ref(db, 'sarange_root/chantiers/' + c.id)).catch(e => Logger.error("Auto-Delete Fail", e));
-              Logger.info(`🗑️ Auto-Clean: ${c.client} (Deleted > 30j)`);
+            const lastUpdate = new Date(c.updatedAt || 0).getTime();
+
+            // Si marqué PURGED et vieux de 30 jours => ON SUPPRIME POUR DE VRAI
+            if (c.purged && (now - lastUpdate > THIRTY_DAYS)) {
+              remove(ref(db, 'sarange_root/chantiers/' + c.id))
+                .then(() => Logger.info(`💀 GC: Deleted physically ${c.id}`))
+                .catch(e => Logger.error("GC Fail", e));
               changed = true;
-              // On ne l'ajoute pas à keptChantiers, donc il disparaît du state local aussi
+              // On ne l'ajoute pas à keptChantiers
             } else {
               keptChantiers.push(c);
             }
@@ -204,7 +203,12 @@ const App = () => {
           finalData.chantiers = keptChantiers;
         }
       }
-      if (changed) Logger.info("Auto-maintenance performed");
+
+      if (changed) {
+        Logger.info("Auto-maintenance (GC) performed");
+        // On sauvegarde le résultat du nettoyage
+        await DB.set('sarange_root', finalData);
+      }
 
       setSt(finalData);
 
@@ -318,19 +322,45 @@ const App = () => {
       showToast("Dossier mis à la corbeille");
     },
 
-    // Restore from Trash
+    // Modifié : Rétablissement avec reset des flags
     restoreChantier: id => {
-      setSt(s => ({ ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, deleted: false, deletedAt: null, updatedAt: new Date().toISOString() } : x) }));
+      setSt(s => ({
+        ...s,
+        chantiers: s.chantiers.map(x => x.id === id ? {
+          ...x,
+          deleted: false,
+          purged: false, // On enlève le flag purged au cas où (sécurité)
+          deletedAt: null,
+          updatedAt: new Date().toISOString()
+        } : x)
+      }));
       showToast("Dossier restauré");
     },
 
-    // Hard Delete (Définitif)
+    // Hard Delete (Définitif) => DEVIENT DU SOFT DELETE "PURGED"
     hardDeleteChantier: async id => {
-      // Optimistic UI update
-      setSt(s => ({ ...s, chantiers: s.chantiers.filter(x => x.id !== id) }));
-      // Physical delete on Firebase
+      const now = new Date().toISOString();
+      const updates = { purged: true, deleted: true, updatedAt: now };
+
+      // 1. Mise à jour Optimiste (State Local)
+      // On le garde dans le state mais marqué purged, pour que l'UI puisse filtrer.
+      // NOTE: L'UI doit filtrer !c.purged
+      setSt(s => ({
+        ...s,
+        chantiers: s.chantiers.map(x => x.id === id ? { ...x, ...updates } : x)
+      }));
+
+      // 2. Propagation Firebase (Pas de remove() !)
       try {
-        await remove(ref(db, 'sarange_root/chantiers/' + id));
+        await update(ref(db, 'sarange_root/chantiers/' + id), updates);
+        // Force update local DB
+        const newState = {
+          ...st,
+          chantiers: st.chantiers.map(x => x.id === id ? { ...x, ...updates } : x),
+          lastWriteTime: Date.now()
+        };
+        await DB.set('sarange_root', newState);
+
         showToast("Dossier supprimé définitivement");
       } catch (e) {
         console.error(e);
@@ -338,25 +368,41 @@ const App = () => {
       }
     },
 
-    // Vide toute la corbeille
+    // Vide toute la corbeille => MARK ALL AS PURGED
     emptyTrash: async () => {
-      const toDelete = st.chantiers.filter(c => c.deleted);
+      const toDelete = st.chantiers.filter(c => c.deleted && !c.purged);
       if (toDelete.length === 0) return;
 
       if (!confirm(`Supprimer définitivement ${toDelete.length} dossiers ?`)) return;
 
-      // Optimistic UI
-      setSt(s => ({ ...s, chantiers: s.chantiers.filter(c => !c.deleted) }));
+      const nowIso = new Date().toISOString();
 
-      // Background delete
+      // 1. Optimistic UI
+      setSt(s => ({
+        ...s,
+        chantiers: s.chantiers.map(c =>
+          (c.deleted && !c.purged)
+            ? { ...c, purged: true, updatedAt: nowIso }
+            : c
+        )
+      }));
+
+      // 2. Background Updates
       let success = 0;
+      const updates = {};
+
       for (const c of toDelete) {
-        try {
-          await remove(ref(db, 'sarange_root/chantiers/' + c.id));
-          success++;
-        } catch (e) { console.error(e); }
+        updates['sarange_root/chantiers/' + c.id] = { ...c, purged: true, updatedAt: nowIso };
+        success++;
       }
-      showToast(`${success} dossiers supprimés`);
+
+      try {
+        // Batch update
+        await update(ref(db), updates);
+        showToast(`${success} dossiers supprimés`);
+      } catch (e) {
+        console.error("Empty Trash Fail", e);
+      }
     },
 
     selectChantier: id => setSt(s => ({ ...s, currentChantierId: id })),
