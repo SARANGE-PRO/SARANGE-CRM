@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
-import { MapPin, Navigation, CheckCircle, AlertCircle, AlertTriangle, Lock, Unlock, Edit, Calendar, Clock, Plus, Trash2, Copy, Send, UserCheck, Search, Settings, Archive, Cloud, CloudOff, Sun, Moon, Menu, Loader2, X } from 'lucide-react';
+import { MapPin, Navigation, CheckCircle, AlertCircle, AlertTriangle, Lock, Unlock, Edit, Calendar, Clock, Plus, Trash2, Copy, Send, UserCheck, Search, Settings, Archive, Cloud, CloudOff, Sun, Moon, Menu, Loader2, X, ExternalLink } from 'lucide-react';
 
 export const cn = (...parts) => parts.filter(Boolean).join(' ');
 
@@ -284,116 +284,50 @@ export const Toast = ({ message, type = 'success', onClose }) => {
 };
 
 /* --- NOUVEAU COMPOSANT : SmartAddress --- */
-/* --- AFFICHE L'ADRESSE AVEC MENU DE NAVIGATION --- */
+/* --- SMART ADDRESS : OUVRE DIRECTEMENT LE GPS --- */
 export const SmartAddress = ({ address, gps, className = "" }) => {
-  const [showNav, setShowNav] = useState(false);
-
-  // Fonction de navigation optimisée
-  const openApp = (app) => {
-    // Nettoyage de l'adresse pour l'URL
-    const query = encodeURIComponent(address);
-    const lat = gps?.lat || 0;
-    const lon = gps?.lon || 0;
-    let url = "";
-
-    switch (app) {
-      case 'native':
-        // C'est ce que tu voulais : Le protocole GEO standard
-        // Sur Android, ça ouvre le menu "Ouvrir avec..." ou l'app par défaut
-        // Sur iOS, ça bascule généralement sur Apple Maps automatiquement
-        if (lat && lon) {
-          // Si on a les coordonnées précises, on les utilise avec l'adresse en label
-          url = `geo:${lat},${lon}?q=${lat},${lon}(${query})`;
-        } else {
-          // Sinon on cherche juste l'adresse
-          url = `geo:0,0?q=${query}`;
-        }
-        break;
-
-      case 'google':
-        // Lien officiel Google Maps (Universal Link)
-        // api=1 assure que ça s'ouvre bien dans l'app si installée
-        url = `https://www.google.com/maps/search/?api=1&query=${query}`;
-        break;
-
-      case 'waze':
-        // Lien officiel Waze Deep Link
-        // navigate=yes lance le guidage direct
-        url = `https://waze.com/ul?q=${query}&navigate=yes`;
-        break;
-
-      default:
-        return;
-    }
-
-    // Ouvre dans une nouvelle fenêtre/application
-    window.open(url, '_blank');
-    setShowNav(false);
-  };
-
   if (!address) return <span className="text-slate-400 italic text-xs">Pas d'adresse</span>;
 
+  const openGPS = (e) => {
+    e.stopPropagation(); // Empêche le clic de traverser (ex: ouverture modal chantier)
+
+    const query = encodeURIComponent(address);
+    const lat = gps?.lat;
+    const lon = gps?.lon;
+
+    // Détection simple iOS (iPhone/iPad)
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    if (isIOS) {
+      // iOS : Apple Maps est le standard qui gère le mieux l'intention "Y aller"
+      // Si l'utilisateur a Google Maps, iOS peut proposer le choix ou ouvrir Apple Maps par défaut.
+      if (lat && lon) {
+        window.location.href = `http://maps.apple.com/?ll=${lat},${lon}&q=${query}`;
+      } else {
+        window.location.href = `http://maps.apple.com/?q=${query}`;
+      }
+    } else {
+      // Android / Autres : Le protocole GEO est le standard pour déclencher le choix d'app (Maps, Waze, CityMapper...)
+      // On force le mode "geo:" qui est une intention système
+      if (lat && lon) {
+        window.location.href = `geo:${lat},${lon}?q=${lat},${lon}(${query})`;
+      } else {
+        // Fallback recherche texte si pas de coordonnées
+        window.location.href = `geo:0,0?q=${query}`;
+      }
+    }
+  };
+
   return (
-    <>
-      {/* Bouton principal (Lien texte) */}
-      <button
-        onClick={(e) => { e.stopPropagation(); setShowNav(true); }}
-        className={`text-left hover:text-brand-600 hover:underline flex items-start group transition-colors ${className}`}
-        title="Lancer le GPS"
-      >
-        <MapPin size={14} className="mr-1 mt-0.5 shrink-0 text-slate-400 group-hover:text-brand-500" />
-        <span className="truncate">{address}</span>
-      </button>
-
-      {/* MODALE DE CHOIX GPS (Bottom Sheet sur mobile) */}
-      {showNav && (
-        <div
-          className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in safe-area-bottom"
-          onClick={() => setShowNav(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-slate-900 rounded-2xl p-4 w-full max-w-sm shadow-2xl animate-slide-up flex flex-col gap-3"
-          >
-            <div className="flex justify-between items-center mb-1">
-              <h3 className="font-bold text-lg dark:text-white">Y aller avec...</h3>
-              <button onClick={() => setShowNav(false)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:bg-slate-200"><X size={16} /></button>
-            </div>
-
-            <p className="text-xs text-slate-500 mb-2 truncate px-1">{address}</p>
-
-            {/* 1. Option Système (GEO protocol) */}
-            <button
-              onClick={() => openApp('native')}
-              className="flex items-center gap-3 p-4 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all font-bold text-slate-700 dark:text-slate-200 border-2 border-transparent focus:border-brand-500"
-            >
-              <Navigation size={22} className="text-slate-600 dark:text-slate-400" />
-              <span>Application par défaut</span>
-            </button>
-
-            <div className="grid grid-cols-2 gap-3">
-              {/* 2. Google Maps */}
-              <button
-                onClick={() => openApp('google')}
-                className="flex flex-col items-center justify-center gap-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-white border border-slate-100 dark:border-slate-700 shadow-sm transition-all"
-              >
-                <img src="https://upload.wikimedia.org/wikipedia/commons/a/aa/Google_Maps_icon_%282020%29.svg" alt="Gmaps" className="w-8 h-8" />
-                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Google Maps</span>
-              </button>
-
-              {/* 3. Waze */}
-              <button
-                onClick={() => openApp('waze')}
-                className="flex flex-col items-center justify-center gap-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-white border border-slate-100 dark:border-slate-700 shadow-sm transition-all"
-              >
-                <img src="https://upload.wikimedia.org/wikipedia/commons/d/d1/Waze_2020.svg" alt="Waze" className="w-8 h-8" />
-                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Waze</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+    <button
+      onClick={openGPS}
+      className={`text-left hover:text-brand-600 hover:underline flex items-start group transition-colors ${className}`}
+      title="Ouvrir dans le GPS"
+    >
+      <MapPin size={14} className="mr-1 mt-0.5 shrink-0 text-slate-400 group-hover:text-brand-500" />
+      <span className="truncate">{address}</span>
+      <ExternalLink size={10} className="ml-1 mt-1 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+    </button>
   );
 };
 
