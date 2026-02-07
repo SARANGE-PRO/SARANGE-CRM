@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ArrowLeft, Edit, Lock, UserCheck, AlertCircle, Plus, Send, Unlock, Trash2, Copy, AlertTriangle, CheckCircle } from 'lucide-react';
 import { Button, Modal, Checkbox, Input, StatusBanner, Toast, Spinner, SmartAddress } from "../ui.jsx";
 import { useApp } from "../context.js";
-import { downloadICS } from "../utils/calendar.js";
+import { manageGoogleEvent } from "../utils/googleCalendar.js";
 import { ProductEditor } from "../components/ProductEditor.jsx";
 import { EditChantierModal } from "./DashboardView.jsx";
 import { generateUUID, buildOptionsString } from "../utils.js";
@@ -390,11 +390,20 @@ export const ChantierDetailView = () => {
                                     <input
                                         type="datetime-local"
                                         className="flex-1 p-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:border-brand-500 outline-none font-bold text-slate-700 transition-colors"
-                                        onChange={(e) => {
+                                        onChange={async (e) => {
                                             const val = e.target.value;
                                             if (val) {
+                                                // 1. Mise à jour locale
                                                 updateChantier(ch.id, { dateIntervention: val });
-                                                try { downloadICS({ ...ch, dateIntervention: val }); } catch (e) { }
+
+                                                // 2. Synchro Google Calendar (Silent)
+                                                try {
+                                                    const updatedChantier = { ...ch, dateIntervention: val };
+                                                    const eventId = await manageGoogleEvent(updatedChantier);
+                                                    if (eventId) {
+                                                        updateChantier(ch.id, { googleEventId: eventId });
+                                                    }
+                                                } catch (e) { console.error(e); }
                                             }
                                         }}
                                     />
