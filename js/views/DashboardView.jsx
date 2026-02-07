@@ -270,7 +270,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                         </div>
                         <div className="flex-1 overflow-y-auto pr-2 pb-20 custom-scrollbar">
                             {todoChantiers.length === 0 ? (
-                                <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Aucun dossier en attente 🎉</div>
+                                <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Aucun dossier en attente</div>
                             ) : (
                                 todoChantiers.map(c => <ChantierCard key={c.id} c={c} isTodo={true} />)
                             )}
@@ -288,7 +288,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                         </div>
                         <div className="flex-1 overflow-y-auto pr-2 pb-20 custom-scrollbar">
                             {plannedChantiers.length === 0 ? (
-                                <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Planning vide 😴</div>
+                                <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Planning vide</div>
                             ) : (
                                 <>
                                     <PlanningGroup title="Aujourd'hui" items={groups.today} color="text-green-600" />
