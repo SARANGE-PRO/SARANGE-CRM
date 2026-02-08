@@ -10,15 +10,16 @@ export const TrashView = ({ onBack, state, actions }) => {
 
     const deletedItems = safeChantiers
         .filter(c => c && c.deleted && !c.purged)
-        .sort((a, b) => (b.deletedAt || 0) - (a.deletedAt || 0));
+        .sort((a, b) => new Date(b.deletedAt || 0) - new Date(a.deletedAt || 0));
 
     const [confirmEmpty, setConfirmEmpty] = useState(false);
 
     // Calcul du temps restant avant suppression auto (approx)
     const getDaysRemaining = (deletedAt) => {
         if (!deletedAt) return 30;
-        const days = 30 - Math.floor((Date.now() - deletedAt) / (1000 * 60 * 60 * 24));
-        return Math.max(0, days);
+        const oneDay = 24 * 60 * 60 * 1000;
+        const daysSinceDelete = Math.floor((Date.now() - new Date(deletedAt).getTime()) / oneDay);
+        return Math.max(0, 30 - daysSinceDelete);
     };
 
     return (
@@ -77,7 +78,11 @@ export const TrashView = ({ onBack, state, actions }) => {
                                             <p className="text-sm text-slate-500">{item.adresse}</p>
                                             <div className="mt-2 flex items-center gap-3 text-xs font-mono text-slate-400">
                                                 <span>Supprimé le: {new Date(item.deletedAt || Date.now()).toLocaleDateString()}</span>
-                                                {daysLeft <= 5 ? (
+                                                {daysLeft <= 0 ? (
+                                                    <span className="text-red-600 font-bold flex items-center gap-1">
+                                                        <AlertCircle size={10} /> Suppression imminente
+                                                    </span>
+                                                ) : daysLeft <= 5 ? (
                                                     <span className="text-red-600 font-bold flex items-center gap-1">
                                                         <AlertCircle size={10} /> Expire dans {daysLeft}j
                                                     </span>

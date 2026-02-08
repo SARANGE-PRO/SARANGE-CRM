@@ -156,7 +156,7 @@ C'est le garant de l'intégrité des données.
 ### 🗑️ Gestion des Suppressions (Tombstones) & Auto-Maintenance
 
 * **Soft Delete** : User clique "Supprimer" -> Item marqué `deleted: true`.
-* **Auto-Archive** : Au démarrage (`runBoot`), le système scanne les chantiers **> 10 jours** sans modification (`updatedAt`) et les marque automatiquement `archived: true` pour alléger la vue principale.
+* **Auto-Archive** : Au démarrage (`runBoot`), le système scanne les chantiers **SENT (Envoyés)** datant de plus de **60 jours** (`sentAt` ou `updatedAt`) et les marque automatiquement `archived: true` pour alléger la vue principale. Les brouillons ne sont jamais archivés automatiquement.
 * **Garbage Collector (GC)** : Si un item est marqué `purged: true` (Corbeille vidée) ET que son `updatedAt` est vieux de plus de **30 jours**, il est **physiquement détruit** de la DB Cloud & Locale.
 
 ### 🔑 Gestion des Tokens (Google API)

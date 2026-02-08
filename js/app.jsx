@@ -175,10 +175,17 @@ const App = () => {
 
       if (finalData.chantiers) {
         // 1. Auto-Archive (Ancien code conservé tel quel)
+        // 1. Auto-Archive (SENT + 60 jours)
+        const SIXTY_DAYS = 60 * 24 * 60 * 60 * 1000;
         finalData.chantiers = finalData.chantiers.map(c => {
-          const d = new Date(c.date).getTime();
-          if (!c.deleted && !c.archived && (now - d > (10 * 24 * 60 * 60 * 1000))) {
+          // Utiliser sentAt en priorité, sinon updatedAt
+          const refDateStr = c.sentAt || c.updatedAt;
+          const refTime = refDateStr ? new Date(refDateStr).getTime() : 0;
+          const isOldEnough = (now - refTime) > SIXTY_DAYS;
+
+          if (!c.deleted && !c.archived && c.sendStatus === 'SENT' && isOldEnough) {
             changed = true;
+            Logger.info(`📂 Auto-Archive: ${c.client} (${c.id})`);
             return { ...c, archived: true };
           }
           return c;
@@ -304,7 +311,7 @@ const App = () => {
 
         const newState = {
           ...s,
-          chantiers: s.chantiers.map(x => x.id === id ? { ...x, deleted: true, deletedAt: Date.now(), updatedAt: new Date().toISOString() } : x),
+          chantiers: s.chantiers.map(x => x.id === id ? { ...x, deleted: true, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : x),
           lastWriteTime: Date.now()
         };
 
