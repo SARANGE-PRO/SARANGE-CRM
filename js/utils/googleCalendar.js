@@ -227,8 +227,13 @@ export const deleteGoogleEvent = async (chantier) => {
 function requestAccessToken() {
     return new Promise((resolve, reject) => {
         tokenClient.callback = (resp) => {
-            if (resp.error) reject(resp);
-            else resolve(resp);
+            if (resp.error) {
+                reject(resp);
+            } else {
+                // CRUCIAL : On enregistre le token dans gapi pour éviter de leRedemander
+                window.gapi.client.setToken(resp);
+                resolve(resp);
+            }
         };
         tokenClient.requestAccessToken({ prompt: '' });
     });

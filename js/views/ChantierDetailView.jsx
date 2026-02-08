@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Edit, Lock, UserCheck, AlertCircle, Plus, Send, Unlock, Trash2, Copy, AlertTriangle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Edit, Lock, UserCheck, AlertCircle, Plus, Send, Unlock, Trash2, Copy, AlertTriangle, CheckCircle, CalendarX, Clock, Calendar, MapPin } from 'lucide-react';
 import { Button } from "../components/ui/Button.jsx";
 import { Modal } from "../components/ui/Modal.jsx";
 import { Checkbox } from "../components/ui/Checkbox.jsx";
@@ -8,13 +8,49 @@ import { StatusBanner } from "../components/ui/StatusBanner.jsx";
 import { Toast } from "../components/ui/Toast.jsx";
 import { Spinner } from "../components/ui/Spinner.jsx";
 import { SmartAddress } from "../components/ui/SmartAddress.jsx";
+import { StepsHeader } from "../components/StepsHeader.jsx";
 import { useApp } from "../context.js";
-import { manageGoogleEvent } from "../utils/googleCalendar.js";
+import { manageGoogleEvent, deleteGoogleEvent } from "../utils/googleCalendar.js";
 import { ProductEditor } from "../components/ProductEditor.jsx";
-import { EditChantierModal } from "./DashboardView.jsx";
-import { generateUUID, buildOptionsString } from "../utils.js";
+import { EditChantierModal } from "../components/EditChantierModal.jsx";
+import { generateUUID, buildOptionsString, getChantierStep } from "../utils.js";
 import { generateReportHTML } from "../reports.js";
 import { Logger } from "../db.js";
+
+const HistorySection = ({ history }) => {
+    if (!history?.length) return null;
+
+    // Tri décroissant pour avoir le plus récent en haut
+    const sorted = [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    return (
+        <div className="mt-8 border-t border-slate-200 dark:border-slate-800 pt-6 animate-fade-in">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                <Clock size={20} className="text-slate-400" />
+                Historique du dossier
+            </h3>
+            <div className="space-y-3">
+                {sorted.map((log, i) => (
+                    <div key={i} className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700 text-sm">
+                        <div className="flex justify-between text-slate-500 dark:text-slate-400 text-xs mb-1">
+                            <span>{new Date(log.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                            <span className="font-medium bg-slate-200 dark:bg-slate-700 px-1.5 rounded">{log.user || 'Système'}</span>
+                        </div>
+                        <div className="text-slate-800 dark:text-slate-200">
+                            <span className="font-bold uppercase text-xs mr-2 text-brand-600 dark:text-brand-400">{log.action === 'UNLOCK' ? 'DÉVERROUILLAGE' : log.action}</span>
+                            <span>{log.reason}</span>
+                        </div>
+                        {log.details && (
+                            <div className="mt-1 pl-3 border-l-2 border-slate-300 dark:border-slate-600 italic text-slate-600 dark:text-slate-400 text-xs">
+                                "{log.details}"
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
 
 /**
  * Envoie les données de métrage vers Google Sheets via Apps Script
@@ -254,27 +290,81 @@ const ConfirmSendModal = ({ chantier, products, incompleteCount, onClose, onStat
 };
 
 const UnlockModal = ({ onClose, onUnlock }) => {
-    const [input, setInput] = useState('');
-    const isValid = input.toUpperCase() === 'MODIFIER';
+    const [reason, setReason] = useState('');
+    const [customReason, setCustomReason] = useState('');
+    const { user } = useApp();
+
+    const isValid = reason && (reason !== 'Autre' || customReason.trim().length > 0);
+
+    const handleConfirm = () => {
+        if (!isValid) return;
+        onUnlock({
+            reason,
+            details: reason === 'Autre' ? customReason : null,
+            user: user?.email || 'Inconnu'
+        });
+    };
 
     return (
         <Modal isOpen={true} onClose={onClose} title="Déverrouiller le dossier" size="sm">
-            <p className="text-slate-600 dark:text-slate-400 mb-4 text-sm">
-                Pour modifier un dossier déjà  envoyé, saisissez <strong className="text-slate-800 dark:text-white">MODIFIER</strong> ci-dessous.
-            </p>
-            <Input value={input} onChange={setInput} placeholder="Tapez MODIFIER" className="mb-6" />
-            <div className="space-y-3">
-                <Button onClick={onUnlock} disabled={!isValid} variant={isValid ? 'danger' : 'secondary'} className="w-full py-4" icon={Unlock}>Déverrouiller</Button>
-                <Button onClick={onClose} variant="ghost" className="w-full">Annuler</Button>
+            <div className="space-y-4">
+                <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800 flex gap-3">
+                    <AlertTriangle className="text-amber-600 shrink-0" size={20} />
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                        Cette action sera enregistrée dans l'historique du dossier.
+                    </p>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Motif du déverrouillage
+                    </label>
+                    <select
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all"
+                    >
+                        <option value="" disabled>Sélectionnez un motif...</option>
+                        <option value="Erreur de métrage">Erreur de métrage</option>
+                        <option value="Changement client">Changement client</option>
+                        <option value="Ajout oublié">Ajout oublié</option>
+                        <option value="Autre">Autre</option>
+                    </select>
+                </div>
+
+                {reason === 'Autre' && (
+                    <div className="animate-fade-in">
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Précisez la raison
+                        </label>
+                        <Input
+                            value={customReason}
+                            onChange={setCustomReason}
+                            placeholder="Ex: Demande architecte..."
+                            autoFocus
+                        />
+                    </div>
+                )}
+
+                <div className="pt-2 flex flex-col gap-2">
+                    <Button
+                        onClick={handleConfirm}
+                        disabled={!isValid}
+                        variant={isValid ? 'danger' : 'secondary'}
+                        className="w-full py-3"
+                        icon={Unlock}
+                    >
+                        Déverrouiller
+                    </Button>
+                    <Button onClick={onClose} variant="ghost" className="w-full">
+                        Annuler
+                    </Button>
+                </div>
             </div>
         </Modal>
     );
 };
 
-import { StepsHeader } from "../components/StepsHeader.jsx";
-import { Calendar } from 'lucide-react'; // Ensure Calendar is imported
-
-// ... previous imports
 
 export const ChantierDetailView = () => {
     const { state, selectChantier, deleteProduct, saveProduct, updateChantier } = useApp();
@@ -299,14 +389,7 @@ export const ChantierDetailView = () => {
     const needsPlanning = !ch.dateIntervention && !isLocked;
 
     // CALCUL DU STEP COURANT
-    // 1: Création (Toujours vrai si on est là)
-    // 2: Planification (Si dateIntervention définie)
-    // 3: Métrage (Si au moins 1 produit créé)
-    // 4: Envoyé (Si sendStatus === 'SENT')
-    let currentStep = 1;
-    if (ch.dateIntervention) currentStep = 2;
-    if (ch.dateIntervention && prds.length > 0) currentStep = 3;
-    if (isLocked) currentStep = 4;
+    const currentStep = getChantierStep(ch, prds);
 
     const addP = () => {
         if (isLocked) return;
@@ -332,10 +415,40 @@ export const ChantierDetailView = () => {
         setToast({ message: `Échec : ${error}`, type: 'error' });
     };
 
-    const handleUnlock = () => {
-        updateChantier(ch.id, { sendStatus: 'DRAFT', sentAt: null, lastError: null });
+    const handleUnlock = ({ reason, details, user }) => {
+        const logEntry = {
+            date: new Date().toISOString(),
+            action: 'UNLOCK',
+            reason,
+            details,
+            user
+        };
+
+        updateChantier(ch.id, {
+            sendStatus: 'DRAFT',
+            sentAt: null,
+            lastError: null,
+            history: [...(ch.history || []), logEntry],
+            updatedAt: new Date().toISOString()
+        });
+
         setShowUnlock(false);
-        setToast({ message: 'Dossier déverrouillé', type: 'info' });
+        setToast({ message: 'Dossier déverrouillé (Action enregistrée)', type: 'info' });
+    };
+
+    const handleStepNavigation = (stepId) => {
+        let targetId = '';
+        if (stepId === 1) targetId = 'step-top';
+        else if (stepId === 2) targetId = needsPlanning ? 'step-planning' : 'step-top';
+        else if (stepId === 3) targetId = 'step-metrage';
+        else if (stepId === 4) targetId = 'step-envoi';
+
+        if (targetId) {
+            const el = document.getElementById(targetId);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
     };
 
     if (!ch) return null;
@@ -368,7 +481,7 @@ export const ChantierDetailView = () => {
                 </div>
 
                 {/* Stepper Integration */}
-                <StepsHeader currentStep={currentStep} />
+                <StepsHeader currentStep={currentStep} onStepClick={handleStepNavigation} />
             </div>
 
             {/* Status Banners */}
@@ -376,11 +489,12 @@ export const ChantierDetailView = () => {
             {hasError && <StatusBanner variant="error" icon={AlertCircle}>Échec de l'envoi : {ch.lastError}</StatusBanner>}
 
             {/* Main Content */}
-            <div className="flex-1 overflow-y-auto p-4 max-w-5xl mx-auto w-full pb-32">
+            <div className="flex-1 overflow-y-auto p-4 max-w-5xl mx-auto w-full pb-32 scroll-smooth">
+                <div id="step-top"></div>
 
                 {/* --- BLOC D'ACTION RAPIDE --- */}
                 {needsPlanning && (
-                    <div className="mb-6 bg-white dark:bg-slate-900 rounded-xl p-6 shadow-lg border-2 border-brand-500 animate-fade-in">
+                    <div id="step-planning" className="mb-6 bg-white dark:bg-slate-900 rounded-xl p-6 shadow-lg border-2 border-brand-500 animate-fade-in">
                         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
                             <div className="bg-brand-100 dark:bg-brand-900/30 p-3 rounded-full text-brand-600 dark:text-brand-400 shrink-0">
                                 <Calendar size={32} />
@@ -435,10 +549,46 @@ export const ChantierDetailView = () => {
                     </div>
                 )}
 
+                {/* --- BLOC RDV PLANIFIÉ (Annulation) --- */}
+                {ch.dateIntervention && !isLocked && (
+                    <div id="step-planning" className="mb-6 bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-green-100 dark:bg-green-800 p-2 rounded-full text-green-700 dark:text-green-300">
+                                <Calendar size={24} />
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold text-green-800 dark:text-green-200 uppercase tracking-wide">Intervention planifiée</p>
+                                <p className="text-lg font-bold text-slate-800 dark:text-white">
+                                    {new Date(ch.dateIntervention).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                            </div>
+                        </div>
+                        <Button
+                            variant="danger"
+                            icon={CalendarX}
+                            onClick={async () => {
+                                if (confirm("Confirmer l'annulation du rendez-vous ? Le dossier repassera en 'À Planifier'.")) {
+                                    // 1. Logic Métier : Update Chantier + Suppression Google Event
+                                    updateChantier(ch.id, { dateIntervention: null, updatedAt: new Date().toISOString() });
+                                    try {
+                                        await deleteGoogleEvent(ch);
+                                        setToast({ message: "Rendez-vous annulé", type: "info" });
+                                    } catch (e) {
+                                        console.error(e);
+                                        setToast({ message: "Erreur suppression Google Calendar", type: "warning" });
+                                    }
+                                }
+                            }}
+                        >
+                            Annuler le RDV
+                        </Button>
+                    </div>
+                )}
+
                 {ch.typeContrat === 'SOUS_TRAITANCE' && <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4 flex items-start"><UserCheck className="text-amber-600 mt-1 mr-3 shrink-0" size={20} /><div><div className="text-xs font-bold text-amber-800 dark:text-amber-200 uppercase">Client Final</div><div className="font-medium text-amber-900 dark:text-amber-100">{ch.clientFinal}</div><a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ch.adresseFinale)}`} target="_blank" rel="noopener noreferrer" className="text-sm text-amber-800 dark:text-amber-300 hover:underline flex items-center"><MapPin size={12} className="mr-1" />{ch.adresseFinale}</a></div></div>}
 
                 {/* Product Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div id="step-metrage" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {prds.map(p => (
                         <div key={p.id} onClick={() => setEdt(p)} className={`bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border-l-[6px] cursor-pointer hover:shadow-md transition-all relative group ${p.type.includes('FENETRE') ? 'border-l-orange-500' : p.type.includes('PORTE') ? 'border-l-green-500' : 'border-l-orange-500'} border-t border-r border-b border-slate-200 dark:border-slate-800 ${isLocked ? 'opacity-75' : ''}`}>
                             <div className="flex justify-between items-start mb-2">
@@ -453,6 +603,10 @@ export const ChantierDetailView = () => {
                     ))}
                     {!isLocked && <button onClick={addP} className="min-h-[160px] border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:border-brand-400 transition-colors"><div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-full mb-2"><Plus size={24} /></div><span className="font-medium">Ajouter</span></button>}
                 </div>
+                {/* Historique du chantier */}
+                <HistorySection history={ch.history} />
+
+                <div id="step-envoi"></div>
             </div>
 
             {/* Sticky Footer - Action Button */}

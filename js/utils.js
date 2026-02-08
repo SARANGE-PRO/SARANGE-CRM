@@ -151,3 +151,40 @@ export const mergeArraysSecure = (cloudList = [], localList = []) => {
     // On retourne tout (Y COMPRIS les items purgés, ils seront filtrés par les Vues)
     return Array.from(map.values());
 };
+
+/**
+ * Détermine l'étape courante du chantier (1 à 4)
+ * @param {Object} chantier - Le chantier
+ * @param {Array} products - La liste des produits (peut être null/undefined)
+ * @returns {number} - 1 (Création), 2 (Planification), 3 (Métrage), 4 (Envoyé)
+ */
+export const getChantierStep = (chantier, products) => {
+    if (!chantier) return 1;
+    if (chantier.sendStatus === 'SENT') return 4;
+
+    const hasProducts = products && Array.isArray(products) && products.length > 0;
+
+    // Si on a une date
+    if (chantier.dateIntervention) {
+        // Et qu'on a au moins un produit -> Étape 3 (Métrage en cours)
+        if (hasProducts) return 3;
+        // Sinon -> Étape 2 (Planifié, prêt à métrer)
+        return 2;
+    }
+
+    // Sinon -> Étape 1 (À planifier)
+    return 1;
+};
+
+/**
+ * Retourne le libellé d'une étape
+ */
+export const getStepLabel = (step) => {
+    switch (step) {
+        case 1: return 'Création';
+        case 2: return 'Planification';
+        case 3: return 'Métrage';
+        case 4: return 'Envoyé';
+        default: return 'Inconnu';
+    }
+};
