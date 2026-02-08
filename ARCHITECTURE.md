@@ -39,10 +39,13 @@ sarange-app/
 │   │   ├── ProductEditor.jsx   # [LOGIC] Éditeur Menuiserie (The Brain)
 │   │   ├── DrawingCanvas.jsx   # [UI] Zone de dessin vectoriel
 │   │   └── ...
-│   └── views/
-│       ├── DashboardView.jsx   # [VIEW] Liste & Filtres
-│       ├── ChantierDetailView.jsx # [VIEW] Moteur de Métré
-│       └── TrashView.jsx       # [VIEW] Gestion Corbeille
+│   ├── views/
+│   │       ├── DashboardView.jsx   # [VIEW] Liste & Filtres
+│   │       ├── ChantierDetailView.jsx # [VIEW] Moteur de Métré
+│   │       ├── QuoteImportModal.jsx # [VIEW] Importation de Devis PDF
+│   │       └── TrashView.jsx       # [VIEW] Gestion Corbeille
+│   ├── services/
+│   │       └── QuoteParserService.js # [SERVICE] Import Devis (PDF OCR/Parser)
 ├── index.html              # Entry Point Web
 ├── vite.config.js          # Build & PWA Configuration
 └── tailwind.config.js      # Design System Tokens
@@ -74,6 +77,9 @@ Les données sont stockées sous forme d'objets JSON dans **IndexedDB** (local) 
 | `purged` | `boolean` | ❌ | `true` si supprimé définitivement (attente GC). |
 | `deletedAt` | `number` (ts) | ❌ | Timestamp de la suppression (pour GC). |
 | `history` | `object[]` | ❌ | Traceabilité. `{ date: ISO, action: 'UNLOCK', reason: string, details?: string, user: string }` |
+| `quoteFile` | `Blob` | ❌ | Fichier PDF source (stocké en Blob dans IndexedDB). |
+| `quoteFileName` | `string` | ❌ | Nom du fichier original. |
+| `referenceDevis` | `string` | ❌ | Numéro de devis extrait (ex: "12345"). |
 
 ### 🪟 `Product` (Menuiserie)
 
@@ -84,6 +90,7 @@ Les données sont stockées sous forme d'objets JSON dans **IndexedDB** (local) 
 | `index` | `number` | Numéro d'ordre (1, 2, 3...) affiché. |
 | `type` | `enum` | `'FENETRE'`, `'PORTE_FENETRE'`, `'BAIE_COULISSANTE'`, `'PORTE_ENTREE'`, `'PORTE_SERVICE'`, `'VOLET_ROULANT'`, `'AUTRE'` |
 | `room` | `string` | Localisation (ex: "Cuisine"). |
+| `description` | `string` | Libellé libre (ex: "Porte de garage 2 vantaux"). |
 | `largeurMm` | `number` | Largeur en mm. |
 | `hauteurMm` | `number` | Hauteur en mm. |
 | `quantity` | `number` | Quantité (défaut: 1). |
@@ -98,6 +105,8 @@ Les données sont stockées sous forme d'objets JSON dans **IndexedDB** (local) 
 | `photos` | `string[]` | **⚠️ ATTENTION** : Actuellement stocké en **Base64** dans IndexedDB (Peut alourdir la sync). *Recommandation future : Stocker sur Firebase Storage et ne garder que l'URL.* |
 | `notes` | `string` | Texte libre. |
 | `isValid` | `boolean`| Calculated. `true` si aucune erreur de validation. |
+| `source` | `enum` | `'MANUAL'`, `'QUOTE'` (Indique si importé). |
+| `isVerified` | `boolean` | `false` par défaut si source `QUOTE`. Requiert validation métreur. |
 | `updatedAt` | `ISO8601` | **Requis** pour la Sync. |
 
 ---
@@ -106,6 +115,7 @@ Les données sont stockées sous forme d'objets JSON dans **IndexedDB** (local) 
 
 ### 🛡️ Validation (`ValidationService` & `ProductEditor`)
 
+* **Auto-Validation (Source Devis)** : Si un produit vient d'un devis (`source: 'QUOTE'`), toute édition manuelle réussie (sauvegarde) force `isVerified = true`.
 * **Champs Requis** : `type`, `dimensions` (L/H), `matiere`, `profil`, `couleur`.
 * **Dimensions** :
   * Si `L` ou `H < 300mm` : **Warning Visual** (Triangle Orange) mais sauvegarde autorisée (cas des impostes).
@@ -201,6 +211,57 @@ Tous les nouveaux écrans DOIVENT utiliser ces composants pour garantir l'unifor
 * **Safe Areas** : Utiliser la classe `.safe-pb` pour éviter que le contenu ne soit caché par la barre de geste iOS.
 * **Touch Targets** : Tous les éléments cliquables doivent faire au moins `44px` de hauteur.
 * **Inputs** : Utiliser `inputMode="decimal"` pour les dimensions pour ouvrir le pavé numérique direct.
+
+---
+
+## 8. Services Utilitaires (Utility Services)
+
+### 📄 `QuoteParserService` (Moteur d'Import PDF - V5)
+
+Moteur d'extraction chirurgical dédié aux devis Sarange/Artertia.
+
+* **Stratégie** : Strict Block Analysis (V5).
+* **Segmentation** : Découpage par bloc regex `/(?:Rep[eè]re)\s*0*(\d+)/`.
+* **Ancre** : Validation obligatoire par ligne de tableau (`Qté + Dims + Prix`).
+* **Logique Dédiée** :
+  * **Portes** : Orientation auto (Max=Hauteur).
+  * **Types** : Priorité stricte (VR > Baie > Porte > Fenêtre).
+  * **Métadonnées** : Extraction du numéro de devis via regex stricte.
+  * **Score** : Confiance calculée sur 5 critères (Ancre, Type, Dim, Mat, Coul). Seuil validité : 0.6.
+* **Dépendances** : `pdfjs-dist` (via CDN).
+
+#### Modèle de Donnée : `QuoteItem`
+
+| Clé | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `UUID` | ID unique. |
+| `repere` | `string` | Numéro du repère devis. |
+| `type` | `string` | Type brut détecté (ex: `VOLET_ROULANT`). |
+| `quantity` | `number` | Quantité extraite du tableau. |
+| `width` | `number` | Largeur (mm). |
+| `height` | `number` | Hauteur (mm). |
+| `confidence` | `number` | Score de confiance (0-1). |
+| `isValid` | `boolean` | True si confidence >= 0.6. |
+
+#### Flux d'Importation
+
+1. **Selection** : Upload PDF dans `QuoteImportModal`.
+2. **Parsing** : `QuoteParserService` segmente et analyse les blocs.
+3. **Mapping** : `ChantierDetailView` convertit via `mapQuoteTypeToAppType`.
+    * Centralisation des correspondances (ex: `BAIE_COULISSANTE` -> `BAIE_COULISSANTE` + Profil Alu).
+4. **Integration** : Ajout au chantier avec notes de traçabilité.
+5. **Traceability Meta** : Extraction du numéro de devis (`referenceDevis`) et stockage du Blob source (`quoteFile`).
+
+### 📂 Visionneuse PDF Mobile-Safe (ObjectURLs)
+
+Pour garantir la performance sur mobile (iOS) et éviter les erreurs de mémoire :
+
+* **Stockage** : Les fichiers PDF sont stockés sous forme de **Blob** natif dans IndexedDB (pas de Base64). Accompagné de `quoteFileName`.
+* **Affichage** : Utilisation de `URL.createObjectURL(blob)` uniquement au moment de l'ouverture de la modale.
+* **Fallbacks & Sécurité** :
+  * Bouton "Ouvrir dans un nouvel onglet" impératif pour iOS.
+  * Bouton "Supprimer le Devis" (Corbeille) : Retire le lien source (`quoteFile`, `referenceDevis`) du chantier mais conserve les produits importés (devenant orphelins de source).
+* **Nettoyage** : Appel systématique à `URL.revokeObjectURL(url)` à la fermeture de la visionneuse pour libérer la RAM.
 
 ---
 

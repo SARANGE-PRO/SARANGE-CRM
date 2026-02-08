@@ -15,14 +15,19 @@ export const SelectToggle = ({ options, value, onChange, label, error, id, class
             : null,
         React.createElement(
             'div',
-            { className: 'flex flex-wrap gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl' },
+            {
+                className: cn(
+                    'flex flex-wrap gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl transition-all',
+                    error && 'field-error-ring animate-shake bg-red-50 dark:bg-red-950/20'
+                )
+            },
             options.map((option) =>
                 React.createElement(
                     'button',
                     {
                         key: option.value,
                         type: 'button',
-                        onClick: () => !disabled && onChange(option.value),
+                        onClick: () => { if (!disabled) { onChange(option.value); } },
                         disabled: disabled,
                         className: cn(
                             'flex-1 flex-grow py-2 px-3 text-sm font-medium rounded-lg transition-all',

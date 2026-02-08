@@ -70,6 +70,8 @@ export const ValidationService = {
         }
 
         if (p.type === "VOLET_ROULANT") {
+            if (!p.couleur) e.push("couleur");
+            if (p.couleur === "AUTRE" && !p.couleurAutre) e.push("couleurAutre");
             if (!p.manoeuvre) e.push("manoeuvre");
             if ((p.manoeuvre === "FILAIRE" || p.manoeuvre === "RADIO") && !p.sortieCable && p.manoeuvre !== "SOLAIRE") e.push("sortieCable");
             if (p.monobloc && !p.coffreADeduireMm) e.push("coffreADeduireMm");

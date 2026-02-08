@@ -174,7 +174,11 @@ export const ProductEditor = ({ product: init, onSave, onCancel, isReadOnly = fa
                                 <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">Lier à </label>
                                 <select className={`w-full p-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:text-white ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`} value={p.lieAProduitId || ''} onChange={e => up('lieAProduitId', e.target.value)} disabled={isReadOnly}>
                                     <option value="">-- Indépendant --</option>
-                                    {state.products.filter(x => ['FENETRE', 'BAIE_COULISSANTE'].includes(x.type)).map(x => <option key={x.id} value={x.id}>#{x.index} {x.type}</option>)}
+                                    {state.products.filter(x => !x.deleted && p.chantierId && x.chantierId === p.chantierId && ['FENETRE', 'BAIE_COULISSANTE'].includes(x.type)).map(x => (
+                                        <option key={x.id} value={x.id}>
+                                            #{String(x.index).padStart(2, '0')} {x.type} {x.room ? `(${x.room})` : ''}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
                             <SelectToggle id="field-manoeuvre" label="Manoeuvre" value={p.manoeuvre} onChange={v => up('manoeuvre', v)} error={isE('manoeuvre')} disabled={isReadOnly} options={[{ label: 'Filaire', value: 'FILAIRE' }, { label: 'Radio', value: 'RADIO' }, { label: 'Solaire', value: 'SOLAIRE' }]} />
@@ -196,6 +200,10 @@ export const ProductEditor = ({ product: init, onSave, onCancel, isReadOnly = fa
                                         <div className="text-right text-sm font-bold text-brand-600">Passage: {p.hauteurMm && p.coffreADeduireMm ? p.hauteurMm - p.coffreADeduireMm : '-'} mm</div>
                                     </div>
                                 )}
+                            </div>
+                            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                                <SelectToggle id="field-couleur" label="Couleur" value={p.couleur} onChange={v => up('couleur', v)} error={isE('couleur')} disabled={isReadOnly} options={[{ label: 'Blanc', value: 'BLANC' }, { label: 'Autre', value: 'AUTRE' }]} />
+                                {p.couleur === 'AUTRE' && <Input id="field-couleurAutre" placeholder="Préciser..." value={p.couleurAutre} onChange={v => up('couleurAutre', v)} error={isE('couleurAutre')} disabled={isReadOnly} />}
                             </div>
                         </div>
                     )}

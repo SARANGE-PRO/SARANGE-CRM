@@ -27,14 +27,16 @@ export const SmartAddress = ({ address, gps, className = "" }) => {
     };
 
     return (
-        <button
-            onClick={openGPS}
-            className={`text-left hover:text-brand-600 hover:underline flex items-start group transition-colors ${className}`}
-            title="Ouvrir dans le GPS"
-        >
-            <MapPin size={14} className="mr-1 mt-0.5 shrink-0 text-slate-400 group-hover:text-brand-500" />
-            <span className="truncate">{address}</span>
-            <ExternalLink size={10} className="ml-1 mt-1 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
-        </button>
+        <div className={`flex items-start group ${className}`}>
+            <button
+                onClick={openGPS}
+                className="p-1 -m-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-brand-600 transition-colors shrink-0"
+                title="Ouvrir dans le GPS"
+            >
+                <MapPin size={14} className="mt-0.5" />
+            </button>
+            <span className="truncate ml-1">{address}</span>
+            <ExternalLink size={10} className="ml-1 mt-1 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+        </div>
     );
 };

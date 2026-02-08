@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Edit, Lock, UserCheck, AlertCircle, Plus, Send, Unlock, Trash2, Copy, AlertTriangle, CheckCircle, CalendarX, Clock, Calendar, MapPin } from 'lucide-react';
+import { ArrowLeft, Edit, Lock, UserCheck, AlertCircle, Plus, Send, Unlock, Trash2, Copy, AlertTriangle, CheckCircle, CheckCircle2, CalendarX, Clock, Calendar, MapPin, FileText, ExternalLink } from 'lucide-react';
 import { Button } from "../components/ui/Button.jsx";
 import { Modal } from "../components/ui/Modal.jsx";
 import { Checkbox } from "../components/ui/Checkbox.jsx";
@@ -13,7 +13,35 @@ import { useApp } from "../context.js";
 import { manageGoogleEvent, deleteGoogleEvent } from "../utils/googleCalendar.js";
 import { ProductEditor } from "../components/ProductEditor.jsx";
 import { EditChantierModal } from "../components/EditChantierModal.jsx";
+import { QuoteImportModal } from "./QuoteImportModal.jsx";
 import { generateUUID, buildOptionsString, getChantierStep } from "../utils.js";
+
+// Mapping Centralisé Sarange Parser V5 -> App Types
+const mapQuoteTypeToAppType = (quoteType, subtype) => {
+    switch (quoteType) {
+        case 'VOLET_ROULANT':
+            return { type: 'VOLET_ROULANT', profil: 'ALU' }; // Default profil ?
+        case 'BAIE_COULISSANTE':
+            // Baie est souvent Alu
+            return { type: 'BAIE_COULISSANTE', profil: 'ALU' };
+        case 'PORTE_ENTREE':
+            return { type: 'PORTE_ENTREE', profil: 'ALU_80' }; // Default high quality
+        case 'PORTE_FENETRE':
+            return { type: 'PORTE_FENETRE', profil: 'RENO_40' };
+        case 'FENETRE':
+            return { type: 'FENETRE', profil: 'RENO_40' };
+        case 'PORTE_SERVICE':
+            return { type: 'PORTE_SERVICE', profil: 'RENO_40' };
+        case 'AUTRE':
+            return { type: 'AUTRE', profil: 'AUTRE' };
+        case 'PORTE_INTERIEURE':
+            // Pas de type natif, fallback sur Porte Entrée ou Autre ?
+            // On peut utiliser 'PORTE_ENTREE' avec note
+            return { type: 'PORTE_ENTREE', notes: 'Type : Porte Intérieure détectée' };
+        default:
+            return { type: 'FENETRE', notes: 'Type inconnu, importé comme fenêtre par défaut' };
+    }
+};
 import { generateReportHTML } from "../reports.js";
 import { Logger } from "../db.js";
 
@@ -371,8 +399,11 @@ export const ChantierDetailView = () => {
     const [edt, setEdt] = useState(null);
     const [showConfirm, setShowConfirm] = useState(false);
     const [showUnlock, setShowUnlock] = useState(false);
+    const [showImport, setShowImport] = useState(false);
+    const [pdfUrl, setPdfUrl] = useState(null);
     const [ied, setIed] = useState(false);
     const [toast, setToast] = useState(null);
+    const [showUnverifiedWarning, setShowUnverifiedWarning] = useState(false);
 
     const ch = state.chantiers.find(c => c.id === state.currentChantierId);
     if (ch && ch.deleted) return null; // Sécurité si le chantier courant vient d'être supprimé (synchro)
@@ -415,6 +446,14 @@ export const ChantierDetailView = () => {
         setToast({ message: `Échec : ${error}`, type: 'error' });
     };
 
+    // Auto-hide unverified warning after 4 seconds
+    React.useEffect(() => {
+        if (showUnverifiedWarning) {
+            const timer = setTimeout(() => setShowUnverifiedWarning(false), 4000);
+            return () => clearTimeout(timer);
+        }
+    }, [showUnverifiedWarning]);
+
     const handleUnlock = ({ reason, details, user }) => {
         const logEntry = {
             date: new Date().toISOString(),
@@ -436,6 +475,86 @@ export const ChantierDetailView = () => {
         setToast({ message: 'Dossier déverrouillé (Action enregistrée)', type: 'info' });
     };
 
+    const handleRemoveQuote = () => {
+        if (!confirm("Voulez-vous supprimer le devis lié à ce chantier ? Les produits importés seront conservés mais ne seront plus liés au fichier source.")) return;
+        updateChantier(ch.id, {
+            quoteFile: null,
+            quoteFileName: null,
+            referenceDevis: null,
+            updatedAt: new Date().toISOString()
+        });
+        setToast({ message: "Lien avec le devis supprimé", type: "info" });
+    };
+
+    /**
+     * Gère l'importation des items du devis.
+     * Mappe les QuoteItems vers le format Product de la BDD.
+     */
+    const handleImport = (quoteItems, file, meta) => {
+        if (!quoteItems || quoteItems.length === 0) return;
+
+        const timestamp = new Date().toISOString();
+        const startIdx = prds.length + 1;
+
+        const newProducts = quoteItems.map((item, idx) => {
+            // Utilisation du Mapping Centralisé V5
+            const mapping = mapQuoteTypeToAppType(item.type, item.subtype);
+
+            // Mapping Matière (Conserve si explicite, sinon default du mapping)
+            let matiere = 'PVC'; // Default global
+            if (item.material === 'ALU') matiere = 'ALU';
+            else if (item.material === 'BOIS') matiere = 'BOIS';
+            else if (item.material === 'ACIER') matiere = 'ACIER';
+
+            // Mapping Couleur
+            let couleur = 'BLANC';
+            let couleurAutre = '';
+            if (item.color === 'GRIS_7016') couleur = 'GRIS_7016';
+            else if (item.color !== 'BLANC' && item.color !== 'Standard') {
+                couleur = 'AUTRE';
+                couleurAutre = item.color;
+            }
+
+            return {
+                id: generateUUID(),
+                chantierId: ch.id,
+                index: startIdx + idx,
+                type: mapping.type,
+                subtype: item.subtype || '',
+                largeurMm: item.width || 0,
+                hauteurMm: item.height || 0,
+                quantity: item.quantity || 1,
+                matiere: matiere,
+                profil: mapping.profil || 'RENO_40',
+                couleur: couleur,
+                couleurAutre: couleurAutre,
+                description: item.label || '',
+                notes: item.label || '', // Libellé original
+                dateCreation: timestamp,
+                updatedAt: timestamp,
+                isValid: item.isValid,
+                source: 'QUOTE',
+                isVerified: false
+            };
+        });
+
+        // Mise à jour du chantier avec le fichier blob et la réf
+        const updatedChantier = {
+            ...ch,
+            quoteFile: file || ch.quoteFile,
+            quoteFileName: file?.name || ch.quoteFileName,
+            referenceDevis: meta?.number || ch.referenceDevis,
+            updatedAt: timestamp
+        };
+        updateChantier(ch.id, updatedChantier);
+
+        // Batch Update / Save
+        newProducts.forEach(p => saveProduct(p));
+
+        setShowImport(false);
+        setToast({ message: `${newProducts.length} menuiseries importées avec succès !`, type: 'success' });
+    };
+
     const handleStepNavigation = (stepId) => {
         let targetId = '';
         if (stepId === 1) targetId = 'step-top';
@@ -452,14 +571,31 @@ export const ChantierDetailView = () => {
     };
 
     if (!ch) return null;
-    if (edt) return <ProductEditor product={edt} onSave={p => { saveProduct(p); setEdt(null) }} onCancel={() => setEdt(null)} isReadOnly={isLocked} />;
+    if (edt) return (
+        <ProductEditor
+            product={edt}
+            onSave={p => {
+                // LOGIQUE DE VALIDATION :
+                // Si le produit vient d'un devis, on valide qu'il a été vérifié lors de la sauvegarde
+                const isQuoteProduct = p.source === 'QUOTE' || edt.source === 'QUOTE';
+                const finalProduct = isQuoteProduct ? { ...p, source: 'QUOTE', isVerified: true } : p;
+
+                saveProduct(finalProduct);
+                setEdt(null);
+            }}
+            onCancel={() => setEdt(null)}
+            isReadOnly={isLocked}
+        />
+    );
 
     const tot = prds.reduce((a, p) => a + (p.quantity || 1), 0);
     const incompleteCount = prds.filter(p => !p.isValid).length;
+    const unverifiedCount = prds.filter(p => p.source === 'QUOTE' && !p.isVerified).length;
+    const hasUnverified = unverifiedCount > 0;
 
     return (
         <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-950">
-            {/* Header */}
+            {/* ... Header remains همان ... */}
             <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10 shadow-sm safe-top-padding">
                 <div className="px-4 py-3 flex items-center justify-between">
                     <div className="flex items-center flex-1 min-w-0">
@@ -471,28 +607,54 @@ export const ChantierDetailView = () => {
                             </div>
                             <div className="text-xs text-slate-500 flex flex-col gap-1 mt-1">
                                 <SmartAddress address={ch.adresse} gps={ch.gps} className="text-slate-500 hover:text-brand-600" />
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                     <span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{tot} Produit(s)</span>
                                     <span>• {ch.typeContrat === 'FOURNITURE_ET_POSE' ? 'Pose' : ch.typeContrat === 'SOUS_TRAITANCE' ? 'Sous-traitance' : 'Fourn. Seule'}</span>
+                                    {ch.referenceDevis && (
+                                        <span className="flex items-center gap-1 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 px-1.5 py-0.5 rounded font-bold border border-brand-100 dark:border-brand-800">
+                                            <FileText size={12} /> {ch.referenceDevis}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         </div>
                     </div>
+                    {ch.quoteFile && (
+                        <div className="flex items-center gap-1">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-200"
+                                icon={FileText}
+                                onClick={() => {
+                                    const url = URL.createObjectURL(ch.quoteFile);
+                                    setPdfUrl(url);
+                                }}
+                            >
+                                <span className="hidden sm:inline">Voir le Devis</span>
+                            </Button>
+                            {!isLocked && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                    icon={Trash2}
+                                    onClick={handleRemoveQuote}
+                                />
+                            )}
+                        </div>
+                    )}
                 </div>
 
-                {/* Stepper Integration */}
                 <StepsHeader currentStep={currentStep} onStepClick={handleStepNavigation} />
             </div>
 
-            {/* Status Banners */}
             {isLocked && <StatusBanner variant="success" icon={Lock} action="Modifier" onAction={() => setShowUnlock(true)}>Dossier verrouillé le {new Date(ch.sentAt).toLocaleDateString('fr-FR')} à  {new Date(ch.sentAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</StatusBanner>}
             {hasError && <StatusBanner variant="error" icon={AlertCircle}>Échec de l'envoi : {ch.lastError}</StatusBanner>}
 
-            {/* Main Content */}
-            <div className="flex-1 overflow-y-auto p-4 max-w-5xl mx-auto w-full pb-32 scroll-smooth">
+            <div className={`flex-1 overflow-y-auto p-4 max-w-5xl mx-auto w-full scroll-smooth ${isLocked ? 'pb-24' : hasUnverified ? 'pb-48' : 'pb-32'}`}>
                 <div id="step-top"></div>
 
-                {/* --- BLOC D'ACTION RAPIDE --- */}
                 {needsPlanning && (
                     <div id="step-planning" className="mb-6 bg-white dark:bg-slate-900 rounded-xl p-6 shadow-lg border-2 border-brand-500 animate-fade-in">
                         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
@@ -511,12 +673,6 @@ export const ChantierDetailView = () => {
                                     <input
                                         type="datetime-local"
                                         className="flex-1 p-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:border-brand-500 outline-none font-bold text-slate-700 transition-colors"
-                                        onChange={(e) => {
-                                            // iOS Fix: On ne sauvegarde plus directement au onChange !
-                                            // On stocke juste dans une variable locale si besoin, 
-                                            // mais ici on va utiliser directement la valeur de l'input au clic du bouton
-                                            // (Pas de state React inutile pour éviter re-render)
-                                        }}
                                         id={`date-picker-${ch.id}`}
                                     />
                                     <Button
@@ -525,19 +681,12 @@ export const ChantierDetailView = () => {
                                         onClick={async () => {
                                             const input = document.getElementById(`date-picker-${ch.id}`);
                                             const val = input?.value;
-
                                             if (!val) return alert("Veuillez sélectionner une date !");
-
-                                            // 1. Mise à jour locale
                                             updateChantier(ch.id, { dateIntervention: val });
-
-                                            // 2. Synchro Google Calendar (Silent)
                                             try {
                                                 const updatedChantier = { ...ch, dateIntervention: val };
                                                 const eventId = await manageGoogleEvent(updatedChantier);
-                                                if (eventId) {
-                                                    updateChantier(ch.id, { googleEventId: eventId });
-                                                }
+                                                if (eventId) updateChantier(ch.id, { googleEventId: eventId });
                                             } catch (e) { console.error(e); }
                                         }}
                                     >
@@ -549,7 +698,6 @@ export const ChantierDetailView = () => {
                     </div>
                 )}
 
-                {/* --- BLOC RDV PLANIFIÉ (Annulation) --- */}
                 {ch.dateIntervention && !isLocked && (
                     <div id="step-planning" className="mb-6 bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in">
                         <div className="flex items-center gap-3">
@@ -568,7 +716,6 @@ export const ChantierDetailView = () => {
                             icon={CalendarX}
                             onClick={async () => {
                                 if (confirm("Confirmer l'annulation du rendez-vous ? Le dossier repassera en 'À Planifier'.")) {
-                                    // 1. Logic Métier : Update Chantier + Suppression Google Event
                                     updateChantier(ch.id, { dateIntervention: null, updatedAt: new Date().toISOString() });
                                     try {
                                         await deleteGoogleEvent(ch);
@@ -585,35 +732,117 @@ export const ChantierDetailView = () => {
                     </div>
                 )}
 
-                {ch.typeContrat === 'SOUS_TRAITANCE' && <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4 flex items-start"><UserCheck className="text-amber-600 mt-1 mr-3 shrink-0" size={20} /><div><div className="text-xs font-bold text-amber-800 dark:text-amber-200 uppercase">Client Final</div><div className="font-medium text-amber-900 dark:text-amber-100">{ch.clientFinal}</div><a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ch.adresseFinale)}`} target="_blank" rel="noopener noreferrer" className="text-sm text-amber-800 dark:text-amber-300 hover:underline flex items-center"><MapPin size={12} className="mr-1" />{ch.adresseFinale}</a></div></div>}
-
-                {/* Product Cards */}
-                <div id="step-metrage" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {prds.map(p => (
-                        <div key={p.id} onClick={() => setEdt(p)} className={`bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border-l-[6px] cursor-pointer hover:shadow-md transition-all relative group ${p.type.includes('FENETRE') ? 'border-l-orange-500' : p.type.includes('PORTE') ? 'border-l-green-500' : 'border-l-orange-500'} border-t border-r border-b border-slate-200 dark:border-slate-800 ${isLocked ? 'opacity-75' : ''}`}>
-                            <div className="flex justify-between items-start mb-2">
-                                <span className="font-bold text-lg dark:text-white">#{String(p.index).padStart(2, '0')}</span>
-                                {p.quantity > 1 && <span className="bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-300 text-xs font-bold px-2 py-1 rounded-full">x{p.quantity}</span>}
+                {ch.typeContrat === 'SOUS_TRAITANCE' && (
+                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4 flex items-start">
+                        <UserCheck className="text-amber-600 mt-1 mr-3 shrink-0" size={20} />
+                        <div>
+                            <div className="text-xs font-bold text-amber-800 dark:text-amber-200 uppercase">Client Final</div>
+                            <div className="font-medium text-amber-900 dark:text-amber-100">
+                                <div className="text-sm text-amber-800 dark:text-amber-300 flex items-center">
+                                    <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ch.adresseFinale)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="p-1 -ml-1 mr-1 rounded-full hover:bg-amber-100 dark:hover:bg-amber-800 text-amber-600 dark:text-amber-400 transition-colors"
+                                        title="Ouvrir dans Maps">
+                                        <MapPin size={12} />
+                                    </a>
+                                    {ch.adresseFinale}
+                                </div>
                             </div>
-                            <div className="text-slate-800 dark:text-slate-200 font-medium mb-1">{p.type}</div>
-                            <div className="text-sm text-slate-500 mb-3">{p.largeurMm} x {p.hauteurMm} mm {p.room && `• ${p.room}`}</div>
-                            {!p.isValid && <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 px-2 py-1 rounded text-xs inline-flex items-center mb-2"><AlertTriangle size={12} className="mr-1" /> Incomplet</div>}
-                            {!isLocked && <div className="flex justify-end gap-3 mt-2 pt-3 border-t border-slate-100 dark:border-slate-800"><button onClick={e => dup(e, p)} className="text-slate-400 hover:text-brand-600 p-1"><Copy size={18} /></button><button onClick={e => { e.stopPropagation(); if (confirm('Supprimer ?')) deleteProduct(p.id) }} className="text-slate-400 hover:text-red-600 p-1"><Trash2 size={18} /></button></div>}
                         </div>
-                    ))}
-                    {!isLocked && <button onClick={addP} className="min-h-[160px] border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:border-brand-400 transition-colors"><div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-full mb-2"><Plus size={24} /></div><span className="font-medium">Ajouter</span></button>}
-                </div>
-                {/* Historique du chantier */}
-                <HistorySection history={ch.history} />
+                    </div>
+                )}
 
+                <div id="step-metrage" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {prds.map(p => {
+                        const isFromQuote = p.source === 'QUOTE';
+                        const needsVerification = isFromQuote && !p.isVerified;
+                        const isVerified = isFromQuote && p.isVerified;
+                        const cardBgClass = needsVerification ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-white dark:bg-slate-900';
+                        const borderLeftClass = needsVerification ? 'border-l-amber-500' : (p.type.includes('FENETRE') ? 'border-l-orange-500' : p.type.includes('PORTE') ? 'border-l-green-500' : 'border-l-brand-500');
+
+                        return (
+                            <div
+                                key={p.id}
+                                onClick={() => setEdt(p)}
+                                className={`${cardBgClass} ${borderLeftClass} rounded-xl p-4 shadow-sm border-l-4 cursor-pointer hover:shadow-md transition-all relative group border-t border-r border-b border-slate-200 dark:border-slate-800 ${isLocked ? 'opacity-75' : ''}`}
+                            >
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className="font-bold text-lg dark:text-white">#{String(p.index).padStart(2, '0')}</span>
+                                    <div className="flex items-center gap-2">
+                                        {needsVerification && (
+                                            <span className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase animate-pulse flex items-center gap-1 border border-amber-200 dark:border-amber-800">
+                                                <AlertTriangle size={10} /> Cotes Devis
+                                            </span>
+                                        )}
+                                        {isVerified && (
+                                            <span className="bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase flex items-center gap-1 border border-green-200 dark:border-green-800">
+                                                <CheckCircle2 size={10} /> Cotes Validées
+                                            </span>
+                                        )}
+                                        {p.quantity > 1 && <span className="bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-300 text-xs font-bold px-2 py-1 rounded-full">x{p.quantity}</span>}
+                                    </div>
+                                </div>
+                                <div className="text-slate-800 dark:text-slate-200 font-medium mb-1">{p.type}</div>
+                                <div className="text-sm text-slate-500 mb-2">
+                                    <span>{p.largeurMm} x {p.hauteurMm} mm {p.room && `• ${p.room}`}</span>
+                                </div>
+                                {!p.isValid && <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 px-2 py-1 rounded text-xs inline-flex items-center mb-2"><AlertCircle size={12} className="mr-1" /> Incomplet</div>}
+                                {!isLocked && (
+                                    <div className="flex justify-end gap-3 mt-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                        <button onClick={e => dup(e, p)} className="text-slate-400 hover:text-brand-600 p-1"><Copy size={18} /></button>
+                                        <button onClick={e => { e.stopPropagation(); if (confirm('Supprimer ?')) deleteProduct(p.id) }} className="text-slate-400 hover:text-red-600 p-1"><Trash2 size={18} /></button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                    {!isLocked && (
+                        <div className="flex flex-col gap-4">
+                            <button onClick={addP} className="flex-1 min-h-[120px] border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:border-brand-400 transition-colors">
+                                <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-full mb-2"><Plus size={24} /></div>
+                                <span className="font-medium">Ajouter Manuellement</span>
+                            </button>
+                            <button onClick={() => setShowImport(true)} className="h-[60px] border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center gap-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                                <FileText size={20} />
+                                <span className="font-medium text-sm">Importer Devis (PDF)</span>
+                            </button>
+                        </div>
+                    )}
+                </div>
+                <HistorySection history={ch.history} />
                 <div id="step-envoi"></div>
             </div>
 
             {/* Sticky Footer - Action Button */}
             {!isLocked && (
-                <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 p-4 safe-pb z-40 shadow-lg">
-                    <Button onClick={() => setShowConfirm(true)} disabled={isSending} className="w-full py-4 text-base font-bold" icon={isSending ? null : Send}>
-                        {isSending ? <span className="flex items-center justify-center gap-3"><Spinner size={20} />Transmission en cours...</span> : 'ENVOYER AU BUREAU'}
+                <div className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-4 safe-pb z-40 shadow-2xl">
+                    {showUnverifiedWarning && hasUnverified && (
+                        <div className="mb-4 flex flex-col items-center animate-bounce-short">
+                            <div className="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 px-4 py-1.5 rounded-full flex items-center gap-2 border border-amber-200 dark:border-amber-800 shadow-sm transition-all">
+                                <AlertTriangle size={16} />
+                                <span className="text-sm font-bold">
+                                    {unverifiedCount} cote{unverifiedCount > 1 ? 's' : ''} devis à vérifier
+                                </span>
+                            </div>
+                            <p className="text-[10px] uppercase tracking-widest text-slate-400 mt-2 font-bold">Action requise avant envoi</p>
+                        </div>
+                    )}
+                    <Button
+                        onClick={() => {
+                            if (hasUnverified) {
+                                setShowUnverifiedWarning(true);
+                            } else {
+                                setShowConfirm(true);
+                            }
+                        }}
+                        disabled={isSending}
+                        className={`w-full py-4 text-base font-bold transition-all duration-300 shadow-lg ${hasUnverified && showUnverifiedWarning ? 'ring-2 ring-amber-500' : 'bg-brand-600 hover:bg-brand-700 active:scale-[0.98]'}`}
+                        icon={isSending ? null : Send}
+                    >
+                        {isSending ? (
+                            <span className="flex items-center justify-center gap-3"><Spinner size={20} />Transmission...</span>
+                        ) : 'ENVOYER AU BUREAU'}
                     </Button>
                 </div>
             )}
@@ -630,7 +859,44 @@ export const ChantierDetailView = () => {
             {/* Modals */}
             {showConfirm && <ConfirmSendModal chantier={ch} products={prds} incompleteCount={incompleteCount} onClose={() => setShowConfirm(false)} onStatusChange={handleStatusChange} onSuccess={handleSendSuccess} onError={handleSendError} />}
             {showUnlock && <UnlockModal onClose={() => setShowUnlock(false)} onUnlock={handleUnlock} />}
+            {showImport && <QuoteImportModal onClose={() => setShowImport(false)} onImport={handleImport} />}
             {ied && <EditChantierModal chantier={ch} onClose={() => setIed(false)} onUpdate={d => updateChantier(ch.id, d)} />}
+
+            {/* Preview PDF Modal (Mobile Safe) */}
+            {pdfUrl && (
+                <Modal
+                    isOpen={true}
+                    onClose={() => {
+                        URL.revokeObjectURL(pdfUrl);
+                        setPdfUrl(null);
+                    }}
+                    title={`Devis - ${ch.referenceDevis || ch.client}`}
+                    size="6xl"
+                >
+                    <div className="flex flex-col h-[85vh]">
+                        {/* Header for Mobile Fallback */}
+                        <div className="flex justify-end p-2 border-b dark:border-slate-800">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                icon={ExternalLink}
+                                onClick={() => window.open(pdfUrl, '_blank')}
+                                className="text-brand-600 dark:text-brand-400 font-bold"
+                            >
+                                Ouvrir dans un nouvel onglet
+                            </Button>
+                        </div>
+                        {/* Iframe for Embedded View */}
+                        <div className="flex-1 w-full bg-slate-100 dark:bg-slate-800 rounded-b-lg overflow-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+                            <iframe
+                                src={pdfUrl}
+                                className="w-full h-full border-0"
+                                title="Aperçu du Devis"
+                            />
+                        </div>
+                    </div>
+                </Modal>
+            )}
 
             {/* Toast */}
             {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
