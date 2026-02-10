@@ -229,7 +229,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
         <div className="flex flex-col h-screen lg:h-screen supports-[height:100dvh]:h-[100dvh] w-full bg-slate-50 dark:bg-slate-900 overflow-hidden">
             {/* HEADER (Sticky Removed -> Flex Item) */}
             <header className="flex-none z-20 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 pb-3 safe-top-padding shadow-sm">
-                <div className="flex justify-between items-center mb-4 max-w-[1400px] mx-auto pt-2">
+                <div className="flex justify-between items-center mb-4 w-full mx-auto pt-2">
                     <div className="flex items-center gap-2">
                         <img src="/favicon-512.png" alt="Logo" className="w-8 h-8 object-contain rounded-lg" />
                         <h1 className="text-xl font-bold tracking-tight">Sarange<span className="text-brand-600">Metrage</span></h1>
@@ -267,7 +267,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                         )}
                     </div>
                 </div>
-                <div className="max-w-[1400px] mx-auto relative flex gap-2">
+                <div className="w-full mx-auto relative flex gap-2">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-3 text-slate-400" size={20} />
                         <input className="w-full pl-10 p-2.5 bg-slate-100 dark:bg-slate-800 border-0 rounded-xl outline-none focus:ring-2 focus:ring-brand-500 dark:text-white transition-all shadow-inner" placeholder="Rechercher un dossier..." value={s} onChange={e => setS(e.target.value)} />
@@ -277,7 +277,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
             </header>
 
             {/* MAIN CONTENT AREA (Flex Grow) */}
-            <main className="flex-1 min-h-0 overflow-y-auto pb-40 lg:pb-0 w-full max-w-[1400px] mx-auto">
+            <main className="flex-1 min-h-0 overflow-y-auto pb-40 lg:pb-0 w-full mx-auto">
 
                 {/* Banner Notification Urgency (Fixed Top) */}
                 {urgencyCount > 0 && (
