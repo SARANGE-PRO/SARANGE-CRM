@@ -258,6 +258,7 @@ Moteur d'extraction chirurgical dédié aux devis Sarange/Artertia.
 Pour garantir la performance sur mobile (iOS) et éviter les erreurs de mémoire :
 
 * **Stockage** : Les fichiers PDF sont stockés sous forme de **Blob** natif dans IndexedDB (pas de Base64). Accompagné de `quoteFileName`.
+* **Indépendance** : Le fichier PDF est lié au **Chantier** (`chantier.quoteFile`) et NON aux produits. La suppression des produits importés n'affecte pas l'accès au fichier PDF source.
 * **Affichage** : Utilisation de `URL.createObjectURL(blob)` uniquement au moment de l'ouverture de la modale.
 * **Fallbacks & Sécurité** :
   * Bouton "Ouvrir dans un nouvel onglet" impératif pour iOS.

@@ -96,6 +96,15 @@ export const QuoteImportModal = ({ onClose, onImport }) => {
         });
     };
 
+    const handleItemChange = (id, field, value) => {
+        setParsedItems((prev) => prev.map((item) => {
+            if (item.id === id) {
+                return { ...item, [field]: value };
+            }
+            return item;
+        }));
+    };
+
     const handleImportClick = () => {
         const selectedItems = parsedItems.filter((it) => selectedIds.has(it.id));
         onImport(selectedItems, currentFile, parsedMeta);
@@ -196,25 +205,55 @@ export const QuoteImportModal = ({ onClose, onImport }) => {
                                                 <td className="px-4 py-3 font-bold text-brand-600 dark:text-brand-400">
                                                     x{item.quantity || 1}
                                                 </td>
-                                                <td className="px-4 py-3 font-medium text-slate-800 dark:text-white">
-                                                    {item.type}
-                                                    {item.kindHint ? (
-                                                        <span className="text-xs text-slate-500 block">{item.kindHint}</span>
-                                                    ) : null}
+                                                <td className="px-4 py-3">
+                                                    <select
+                                                        value={item.type}
+                                                        onChange={(e) => handleItemChange(item.id, 'type', e.target.value)}
+                                                        className="w-full p-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                                                    >
+                                                        <option value="FENETRE">FENETRE</option>
+                                                        <option value="PORTE_FENETRE">PORTE_FENETRE</option>
+                                                        <option value="BAIE_COULISSANTE">BAIE_COULISSANTE</option>
+                                                        <option value="PORTE_ENTREE">PORTE_ENTREE</option>
+                                                        <option value="PORTE_SERVICE">PORTE_SERVICE</option>
+                                                        <option value="VOLET_ROULANT">VOLET_ROULANT</option>
+                                                        <option value="AUTRE">AUTRE</option>
+                                                    </select>
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    <span className="font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                                                        {item.width} x {item.height}
-                                                    </span>
+                                                    <div className="flex items-center gap-1">
+                                                        <input
+                                                            type="number"
+                                                            value={item.width}
+                                                            onChange={(e) => handleItemChange(item.id, 'width', parseInt(e.target.value) || 0)}
+                                                            className="w-16 p-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-center focus:ring-2 focus:ring-brand-500 outline-none"
+                                                        />
+                                                        <span className="text-slate-400">x</span>
+                                                        <input
+                                                            type="number"
+                                                            value={item.height}
+                                                            onChange={(e) => handleItemChange(item.id, 'height', parseInt(e.target.value) || 0)}
+                                                            className="w-16 p-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-center focus:ring-2 focus:ring-brand-500 outline-none"
+                                                        />
+                                                    </div>
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    <div className="flex flex-col">
-                                                        <span>{item.material}</span>
-                                                        <span className="text-xs text-slate-500">{item.color}</span>
+                                                    <div className="flex flex-col gap-1">
+                                                        <input
+                                                            type="text"
+                                                            value={item.label || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'label', e.target.value)}
+                                                            placeholder="Désignation..."
+                                                            className="w-full p-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                                                        />
+                                                        <div className="text-xs text-slate-500 flex gap-2">
+                                                            <span>{item.material}</span>
+                                                            <span>{item.color}</span>
+                                                        </div>
                                                     </div>
                                                 </td>
                                                 <td
-                                                    className="px-4 py-3 text-xs text-slate-400 italic max-w-[200px] truncate"
+                                                    className="px-4 py-3 text-xs text-slate-400 italic max-w-[150px] truncate"
                                                     title={item.originalLine}
                                                 >
                                                     "{item.originalLine}"

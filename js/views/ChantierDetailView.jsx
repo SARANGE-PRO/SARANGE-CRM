@@ -619,6 +619,7 @@ export const ChantierDetailView = () => {
                             </div>
                         </div>
                     </div>
+                    {/* Le bouton est conditionné par le fichier du chantier, indépendamment des produits */}
                     {ch.quoteFile && (
                         <div className="flex items-center gap-1">
                             <Button
