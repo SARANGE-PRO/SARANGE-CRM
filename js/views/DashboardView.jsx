@@ -226,7 +226,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
     // --- MAIN RENDER ---
 
     return (
-        <div className="flex flex-col h-[100dvh] w-full bg-slate-50 dark:bg-slate-900 overflow-hidden">
+        <div className="fixed inset-0 flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden">
             {/* HEADER (Sticky Removed -> Flex Item) */}
             <header className="flex-none z-20 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 pb-3 safe-top-padding shadow-sm">
                 <div className="flex justify-between items-center mb-4 max-w-[1400px] mx-auto pt-2">
@@ -277,7 +277,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
             </header>
 
             {/* MAIN CONTENT AREA (Flex Grow) */}
-            <main className="flex-1 overflow-hidden relative flex flex-col w-full max-w-[1400px] mx-auto">
+            <main className="flex-1 flex flex-col min-h-0 relative w-full max-w-[1400px] mx-auto">
 
                 {/* Banner Notification Urgency (Fixed Top) */}
                 {urgencyCount > 0 && (
@@ -310,7 +310,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                             </h3>
                         </div>
                         {/* SCROLL AREA with Padding Bottom for Mobile Fab/Safe Area */}
-                        <div className="flex-1 overflow-y-auto pr-2 pb-24 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto overscroll-contain pr-2 pb-32 custom-scrollbar">
                             {todoChantiers.length === 0 ? (
                                 <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Aucun dossier en attente</div>
                             ) : (
@@ -329,7 +329,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                             </h3>
                         </div>
                         {/* SCROLL AREA */}
-                        <div className="flex-1 overflow-y-auto pr-2 pb-24 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto overscroll-contain pr-2 pb-32 custom-scrollbar">
                             {plannedChantiers.length === 0 ? (
                                 <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Planning vide</div>
                             ) : (
@@ -353,7 +353,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                             </h3>
                         </div>
                         {/* SCROLL AREA */}
-                        <div className="flex-1 overflow-y-auto pr-2 pb-24 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto overscroll-contain pr-2 pb-32 custom-scrollbar">
                             {doneChantiers.length === 0 ? (
                                 <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Aucun dossier envoyé</div>
                             ) : (
