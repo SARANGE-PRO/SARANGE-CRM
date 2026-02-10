@@ -53,7 +53,7 @@ const MobileNavTiles = ({ activeTab, onTabChange, counts }) => {
     );
 };
 
-export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpenTrash, isOnline }) => {
+export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpenTrash, isOnline, firebaseConnected }) => {
     const { state, selectChantier, deleteChantier, duplicateChantier, updateChantier, addChantier } = useApp();
     const [s, setS] = useState('');
     const [m, setM] = useState(false); // New Modal
@@ -226,15 +226,31 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
     // --- MAIN RENDER ---
 
     return (
-        <>
-            <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 px-4 pb-3 safe-top-padding shadow-sm">
+        <div className="flex flex-col h-[100dvh] w-full bg-slate-50 dark:bg-slate-900 overflow-hidden">
+            {/* HEADER (Sticky Removed -> Flex Item) */}
+            <header className="flex-none z-20 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 pb-3 safe-top-padding shadow-sm">
                 <div className="flex justify-between items-center mb-4 max-w-[1400px] mx-auto pt-2">
                     <div className="flex items-center gap-2">
                         <img src="/favicon-512.png" alt="Logo" className="w-8 h-8 object-contain rounded-lg" />
                         <h1 className="text-xl font-bold tracking-tight">Sarange<span className="text-brand-600">Metrage</span></h1>
                     </div>
                     <div className="flex gap-2 relative" ref={wrapperRef}>
-                        {isOnline ? (<div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-full"><Cloud size={20} className="text-green-500" /></div>) : (<div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full"><CloudOff size={20} className="text-slate-400" /></div>)}
+                        {/* SYNC STATUS ICON */}
+                        {isOnline ? (
+                            firebaseConnected ? (
+                                <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-full" title="Connecté au Cloud">
+                                    <Cloud size={20} className="text-green-500" />
+                                </div>
+                            ) : (
+                                <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-full animate-pulse" title="Problème de connexion Firebase (Quota/Réseau)">
+                                    <AlertCircle size={20} className="text-orange-500" />
+                                </div>
+                            )
+                        ) : (
+                            <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full" title="Hors Connexion">
+                                <CloudOff size={20} className="text-slate-400" />
+                            </div>
+                        )}
                         <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                             <Menu size={20} />
                         </button>
@@ -260,26 +276,29 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                 </div>
             </header>
 
-            <main className="flex-1 p-4 max-w-[1400px] mx-auto w-full h-[calc(100vh-140px)] overflow-hidden flex flex-col">
+            {/* MAIN CONTENT AREA (Flex Grow) */}
+            <main className="flex-1 overflow-hidden relative flex flex-col w-full max-w-[1400px] mx-auto">
 
-                {/* Banner Notification Urgency */}
+                {/* Banner Notification Urgency (Fixed Top) */}
                 {urgencyCount > 0 && (
-                    <div className="mb-4 shrink-0">
+                    <div className="flex-none px-4 pt-4 mb-2">
                         <StatusBanner variant="warning" icon={AlertCircle}>
                             {urgencyCount} dossiers en attente de planification depuis +3 jours !
                         </StatusBanner>
                     </div>
                 )}
 
-                {/* MOBILE TILE NAVIGATION */}
-                <MobileNavTiles
-                    activeTab={activeTab}
-                    onTabChange={setActiveTab}
-                    counts={{ todo: todoChantiers.length, planning: plannedChantiers.length, done: doneChantiers.length }}
-                />
+                {/* MOBILE NAV TILES (Fixed Top Mobile) */}
+                <div className="flex-none px-4 pt-2 z-10 w-full relative">
+                    <MobileNavTiles
+                        activeTab={activeTab}
+                        onTabChange={setActiveTab}
+                        counts={{ todo: todoChantiers.length, planning: plannedChantiers.length, done: doneChantiers.length }}
+                    />
+                </div>
 
-                {/* KANBAN GRID */}
-                <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+                {/* SCROLLABLE COLUMNS WRAPPER */}
+                <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6 h-full px-4 pb-0">
 
                     {/* COL 1: À PLANIFIER */}
                     <div className={`flex flex-col h-full ${activeTab === 'TODO' ? 'block' : 'hidden lg:flex'}`}>
@@ -290,7 +309,8 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                                 <span className="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full">{todoChantiers.length}</span>
                             </h3>
                         </div>
-                        <div className="flex-1 overflow-y-auto pr-2 pb-20 custom-scrollbar">
+                        {/* SCROLL AREA with Padding Bottom for Mobile Fab/Safe Area */}
+                        <div className="flex-1 overflow-y-auto pr-2 pb-24 custom-scrollbar">
                             {todoChantiers.length === 0 ? (
                                 <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Aucun dossier en attente</div>
                             ) : (
@@ -308,7 +328,8 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                                 <span className="bg-brand-100 text-brand-700 text-xs px-2 py-0.5 rounded-full">{plannedChantiers.length}</span>
                             </h3>
                         </div>
-                        <div className="flex-1 overflow-y-auto pr-2 pb-20 custom-scrollbar">
+                        {/* SCROLL AREA */}
+                        <div className="flex-1 overflow-y-auto pr-2 pb-24 custom-scrollbar">
                             {plannedChantiers.length === 0 ? (
                                 <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Planning vide</div>
                             ) : (
@@ -331,7 +352,8 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                                 <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">{doneChantiers.length}</span>
                             </h3>
                         </div>
-                        <div className="flex-1 overflow-y-auto pr-2 pb-20 custom-scrollbar">
+                        {/* SCROLL AREA */}
+                        <div className="flex-1 overflow-y-auto pr-2 pb-24 custom-scrollbar">
                             {doneChantiers.length === 0 ? (
                                 <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Aucun dossier envoyé</div>
                             ) : (
@@ -345,7 +367,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
 
             {m && <NewChantierModal onClose={() => setM(false)} />}
             {planningId && <PlanningModal onClose={() => setPlanningId(null)} onConfirm={handlePlanifier} />}
-        </>
+        </div>
     );
 };
 

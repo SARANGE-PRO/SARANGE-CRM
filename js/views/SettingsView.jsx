@@ -1,9 +1,11 @@
 import React, { useRef } from 'react';
-import { ArrowLeft, Download, FileText, Trash2 } from 'lucide-react';
+import { ArrowLeft, Download, FileText, Trash2, RefreshCw } from 'lucide-react';
+import { useApp } from "../context.js";
 import { Card } from "../components/ui/Card.jsx";
 
 /* SettingsView - Gestion des parametres */
 export const SettingsView = ({ onBack, state, onImport }) => {
+    const { forceSync } = useApp();
     const fileInputRef = useRef(null);
 
     const handleExport = () => {
@@ -56,6 +58,20 @@ export const SettingsView = ({ onBack, state, onImport }) => {
                     <Card>
                         <div onClick={handleExport} className="p-4 border-b border-slate-100 dark:border-slate-800 cursor-pointer flex gap-3 items-center hover:bg-slate-50 dark:hover:bg-slate-800/50"><Download size={20} className="text-green-600" /><div className="flex-1"><div className="font-medium dark:text-white">Sauvegarder (Export)</div><div className="text-xs text-slate-500">Telecharger JSON</div></div></div>
                         <div onClick={handleImportClick} className="p-4 cursor-pointer flex gap-3 items-center hover:bg-slate-50 dark:hover:bg-slate-800/50"><FileText size={20} className="text-blue-600" /><div className="flex-1"><div className="font-medium dark:text-white">Restaurer (Import)</div><div className="text-xs text-slate-500">Charger JSON</div></div><input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" /></div>
+                    </Card>
+                </section>
+
+                {/* Section Sychro Diagnostic */}
+                <section>
+                    <h2 className="text-sm font-bold text-brand-600 uppercase mb-3 ml-1">Synchronisation Cloud</h2>
+                    <Card>
+                        <div onClick={forceSync} className="p-4 cursor-pointer flex gap-3 items-center hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                            <RefreshCw size={20} className="text-brand-600" />
+                            <div className="flex-1">
+                                <div className="font-medium dark:text-white">Forcer la synchronisation</div>
+                                <div className="text-xs text-slate-500">Relancer la connexion et fusionner</div>
+                            </div>
+                        </div>
                     </Card>
                 </section>
 

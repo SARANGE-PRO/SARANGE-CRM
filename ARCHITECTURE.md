@@ -211,6 +211,7 @@ Tous les nouveaux écrans DOIVENT utiliser ces composants pour garantir l'unifor
 * **Safe Areas** : Utiliser la classe `.safe-pb` pour éviter que le contenu ne soit caché par la barre de geste iOS.
 * **Touch Targets** : Tous les éléments cliquables doivent faire au moins `44px` de hauteur.
 * **Inputs** : Utiliser `inputMode="decimal"` pour les dimensions pour ouvrir le pavé numérique direct.
+* **Full Screen Layouts** : Utiliser `h-[100dvh]` (Dynamic Viewport Height) au lieu de `100vh` pour gérer correctement les barres d'adresse mobiles rétractables.
 
 ---
 

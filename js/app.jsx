@@ -5,7 +5,7 @@ import { Spinner } from "./components/ui/Spinner.jsx";
 
 // Firebase imports
 import { db, auth, googleProvider } from "../src/firebase.js";
-import { ref, set, get, child, update, remove } from "firebase/database";
+import { ref, set, get, child, update, remove, onValue } from "firebase/database";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 
 import { DB, Logger } from "./db.js";
@@ -105,6 +105,8 @@ const App = () => {
   const [view, setView] = useState('list');
   const [dark, setDark] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  // NEW: Firebase Real-time connection status
+  const [firebaseConnected, setFirebaseConnected] = useState(false);
   const [toast, setToast] = useState(null);
 
   const showToast = (msg, type = 'success') => setToast({ message: msg, type });
@@ -235,7 +237,7 @@ const App = () => {
     }
   }, [user]);
 
-  // Online/Offline listeners
+  // Online/Offline listeners (Navigator)
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -245,6 +247,18 @@ const App = () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
+  }, []);
+
+  // NEW: Firebase Realtime Connection Listener (.info/connected)
+  useEffect(() => {
+    const connectedRef = ref(db, ".info/connected");
+    const unsubscribe = onValue(connectedRef, (snap) => {
+      const isConnected = snap.val() === true;
+      setFirebaseConnected(isConnected);
+      if (isConnected) Logger.info("✅ Firebase Connected");
+      else Logger.warn("❌ Firebase Disconnected (Offline or Blocking)");
+    });
+    return () => unsubscribe();
   }, []);
 
   // Suppression du listener temps réel (Optimisation bande passante)
@@ -417,7 +431,59 @@ const App = () => {
     saveProduct: p => setSt(s => { const now = new Date().toISOString(); const ex = s.products.find(x => x.id === p.id); return { ...s, products: ex ? s.products.map(x => x.id === p.id ? { ...p, dateMaj: now, updatedAt: now } : x) : [...s.products, { ...p, updatedAt: now }] } }),
     deleteProduct: id => setSt(s => ({ ...s, products: s.products.map(x => x.id === id ? { ...x, deleted: true, updatedAt: new Date().toISOString() } : x) })),
     duplicateChantier: id => { const c = st.chantiers.find(x => x.id === id); if (!c) return; const nId = generateUUID(), nC = { ...c, id: nId, client: c.client + " (Copie)", date: new Date().toISOString(), updatedAt: new Date().toISOString(), dateFinalisation: null, sendStatus: 'DRAFT', sentAt: null, lastError: null }, cP = st.products.filter(p => p.chantierId === id && !p.deleted).map(p => ({ ...p, id: generateUUID(), chantierId: nId, updatedAt: new Date().toISOString() })); setSt(s => ({ ...s, chantiers: [nC, ...s.chantiers], products: [...s.products, ...cP] })); showToast("Dossier dupliqué"); },
-    importData: (newData) => { setSt(newData); DB.set('sarange_root', newData).catch(e => console.error(e)); }
+    importData: (newData) => { setSt(newData); DB.set('sarange_root', newData).catch(e => console.error(e)); },
+
+    // NEW: Smart Force Sync (Fetch -> Merge -> Push)
+    forceSync: async () => {
+      if (!navigator.onLine) {
+        showToast("Impossible : Pas de connexion internet", "error");
+        return;
+      }
+
+      showToast("Synchronisation en cours...", "info");
+      try {
+        // 1. Fetch Cloud
+        const snapshot = await get(child(ref(db), 'sarange_root'));
+        let cloudData = snapshot.exists() ? snapshot.val() : { chantiers: {}, products: {} };
+
+        // Normalisation
+        const cloudChantiers = cloudData.chantiers ? Object.values(cloudData.chantiers) : [];
+        const cloudProducts = cloudData.products ? Object.values(cloudData.products) : [];
+
+        // 2. Merge (Smart)
+        const mergedChantiers = mergeArraysSecure(cloudChantiers, st.chantiers);
+        const mergedProducts = mergeArraysSecure(cloudProducts, st.products);
+        const newMaxTime = Math.max(cloudData.lastWriteTime || 0, st.lastWriteTime || 0, Date.now());
+
+        const mergedState = {
+          ...st,
+          chantiers: mergedChantiers,
+          products: mergedProducts,
+          lastWriteTime: newMaxTime
+        };
+
+        // 3. Update Local
+        setSt(mergedState);
+        await DB.set('sarange_root', mergedState);
+
+        // 4. Push Back to Cloud (Full Sync to ensure consistency)
+        // Note: We use granular updates to be safe, but here we want to ensure everything is in sync
+        const updates = {};
+        mergedChantiers.forEach(c => updates['sarange_root/chantiers/' + c.id] = c);
+        mergedProducts.forEach(p => updates['sarange_root/products/' + p.id] = p);
+        updates['sarange_root/lastWriteTime'] = newMaxTime;
+
+        await update(ref(db), updates);
+
+        showToast("Synchronisation terminée avec succès !", "success");
+        Logger.info("🔄 Force Sync Complete");
+
+      } catch (e) {
+        console.error("Force Sync Fail", e);
+        showToast("Erreur Sync : " + e.message, "error");
+        Logger.error("Force Sync Fail", e);
+      }
+    }
   }), [st, user]);
 
   if (authLoading) return <div className="h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900"><Spinner size={40} className="text-brand-600" /></div>;
@@ -445,7 +511,17 @@ const App = () => {
                 /* Lazy loading du TrashView qui sera créé juste après */
                 <TrashView onBack={() => setView('list')} state={st} actions={act} /> :
                 !st.currentChantierId ?
-                  <DashboardView onNew={() => setView('new')} viewMode={view} setViewMode={setView} isDark={dark} toggleDark={() => setDark(!dark)} onOpenSettings={() => setView('settings')} onOpenTrash={() => setView('trash')} isOnline={isOnline} /> :
+                  <DashboardView 
+                    onNew={() => setView('new')} 
+                    viewMode={view} 
+                    setViewMode={setView} 
+                    isDark={dark} 
+                    toggleDark={() => setDark(!dark)} 
+                    onOpenSettings={() => setView('settings')} 
+                    onOpenTrash={() => setView('trash')} 
+                    isOnline={isOnline}
+                    firebaseConnected={firebaseConnected} // Pass diagnostic prop
+                  /> :
                   <ChantierDetailView />}
           </Suspense>
         </ErrorBoundary>
