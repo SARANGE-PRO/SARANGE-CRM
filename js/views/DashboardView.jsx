@@ -226,7 +226,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
     // --- MAIN RENDER ---
 
     return (
-        <div className="fixed inset-0 flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden">
+        <div className="flex flex-col h-screen lg:h-screen supports-[height:100dvh]:h-[100dvh] w-full bg-slate-50 dark:bg-slate-900 overflow-hidden">
             {/* HEADER (Sticky Removed -> Flex Item) */}
             <header className="flex-none z-20 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 pb-3 safe-top-padding shadow-sm">
                 <div className="flex justify-between items-center mb-4 max-w-[1400px] mx-auto pt-2">
@@ -277,7 +277,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
             </header>
 
             {/* MAIN CONTENT AREA (Flex Grow) */}
-            <main className="flex-1 flex flex-col min-h-0 relative w-full max-w-[1400px] mx-auto">
+            <main className="flex-1 min-h-0 overflow-y-auto pb-40 lg:pb-0 w-full max-w-[1400px] mx-auto">
 
                 {/* Banner Notification Urgency (Fixed Top) */}
                 {urgencyCount > 0 && (
@@ -298,10 +298,10 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                 </div>
 
                 {/* SCROLLABLE COLUMNS WRAPPER */}
-                <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6 h-full px-4 pb-0">
+                <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6 h-auto lg:h-full px-4 pb-0">
 
                     {/* COL 1: À PLANIFIER */}
-                    <div className={`flex flex-col h-full ${activeTab === 'TODO' ? 'block' : 'hidden lg:flex'}`}>
+                    <div className={`flex flex-col h-auto lg:h-full ${activeTab === 'TODO' ? 'block' : 'hidden lg:flex'}`}>
                         <div className="flex items-center justify-between mb-4 px-2 shrink-0">
                             <h3 className="font-bold text-red-600 flex items-center gap-2">
                                 <AlertCircle size={20} />
@@ -310,7 +310,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                             </h3>
                         </div>
                         {/* SCROLL AREA with Padding Bottom for Mobile Fab/Safe Area */}
-                        <div className="flex-1 overflow-y-auto overscroll-contain pr-2 pb-32 custom-scrollbar">
+                        <div className="flex-1 lg:overflow-y-auto overscroll-contain pr-2 pb-0 lg:pb-32 custom-scrollbar">
                             {todoChantiers.length === 0 ? (
                                 <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Aucun dossier en attente</div>
                             ) : (
@@ -320,7 +320,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                     </div>
 
                     {/* COL 2: PLANNING */}
-                    <div className={`flex flex-col h-full ${activeTab === 'PLANNING' ? 'block' : 'hidden lg:flex'} lg:border-l lg:border-r lg:border-slate-100 lg:dark:border-slate-800 lg:px-6`}>
+                    <div className={`flex flex-col h-auto lg:h-full ${activeTab === 'PLANNING' ? 'block' : 'hidden lg:flex'} lg:border-l lg:border-r lg:border-slate-100 lg:dark:border-slate-800 lg:px-6`}>
                         <div className="flex items-center justify-between mb-4 px-2 shrink-0">
                             <h3 className="font-bold text-brand-600 flex items-center gap-2">
                                 <Calendar size={20} />
@@ -329,7 +329,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                             </h3>
                         </div>
                         {/* SCROLL AREA */}
-                        <div className="flex-1 overflow-y-auto overscroll-contain pr-2 pb-32 custom-scrollbar">
+                        <div className="flex-1 lg:overflow-y-auto overscroll-contain pr-2 pb-0 lg:pb-32 custom-scrollbar">
                             {plannedChantiers.length === 0 ? (
                                 <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Planning vide</div>
                             ) : (
@@ -344,7 +344,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                     </div>
 
                     {/* COL 3: ENVOYÉS */}
-                    <div className={`flex flex-col h-full ${activeTab === 'DONE' ? 'block' : 'hidden lg:flex'}`}>
+                    <div className={`flex flex-col h-auto lg:h-full ${activeTab === 'DONE' ? 'block' : 'hidden lg:flex'}`}>
                         <div className="flex items-center justify-between mb-4 px-2 shrink-0">
                             <h3 className="font-bold text-green-600 flex items-center gap-2">
                                 <CheckCircle size={20} />
@@ -353,7 +353,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                             </h3>
                         </div>
                         {/* SCROLL AREA */}
-                        <div className="flex-1 overflow-y-auto overscroll-contain pr-2 pb-32 custom-scrollbar">
+                        <div className="flex-1 lg:overflow-y-auto overscroll-contain pr-2 pb-0 lg:pb-32 custom-scrollbar">
                             {doneChantiers.length === 0 ? (
                                 <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Aucun dossier envoyé</div>
                             ) : (
