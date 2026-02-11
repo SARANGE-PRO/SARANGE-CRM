@@ -2,8 +2,8 @@
 
 # 🏗️ Architecture & Documentation Technique - SarangePro
 
-> **Version** : 2.0.0
-> **Dernière mise à jour** : 2026-02-08
+> **Version** : 2.1.0
+> **Dernière mise à jour** : 2026-02-11
 > **Statut** : REFERENCE_ABSOLUE
 
 Ce document est la **source de vérité technique** pour le projet SarangePro. Toute modification du code doit respecter les principes, schémas et architectures décrits ci-dessous.
@@ -38,14 +38,35 @@ sarange-app/
 │   │   ├── ui/             # [DESIGN] Composants atomiques (Input, Button...)
 │   │   ├── ProductEditor.jsx   # [LOGIC] Éditeur Menuiserie (The Brain)
 │   │   ├── DrawingCanvas.jsx   # [UI] Zone de dessin vectoriel
-│   │   └── ...
-│   ├── views/
-│   │       ├── DashboardView.jsx   # [VIEW] Liste & Filtres
-│   │       ├── ChantierDetailView.jsx # [VIEW] Moteur de Métré
-│   │       ├── QuoteImportModal.jsx # [VIEW] Importation de Devis PDF
-│   │       └── TrashView.jsx       # [VIEW] Gestion Corbeille
-│   ├── services/
-│   │       └── QuoteParserService.js # [SERVICE] Import Devis (PDF OCR/Parser)
+│   │  ### 3.2. Hiérarchie des Composants
+`App.jsx` agit comme contrôleur principal et routeur.
+
+*   `App.jsx`
+    *   `Layout` (Sidebar + Main Content)
+        *   `AppHeader` (Nouveau : Header unifié avec menu, mode sombre, synchro)
+    *   `Views`
+        *   `DashboardView` (Vue principale, liste des chantiers)
+            *   *Utilise `ChantierCard` pour l'affichage des dossiers*
+        *   `CalendarView` (Vue calendrier)
+            *   *Utilise `ChantierCard` pour le détail des RDV*
+        *   `MapView` (Vue carte Leaflet)
+        *   `TrashView` (Corbeille)
+        *   `SettingsView` (Paramètres, Synchro)
+        *   `ChantierDetailView` (Détail d'un chantier, lazy-loaded)
+    *   `Modals` (Portals)
+       *   `NewChantierModal`
+       *   `PlanningModal`
+
+### 3.3. Composants Réutilisables (`js/components/`)
+*   `AppHeader.jsx` : En-tête global responsive.
+*   `ChantierCard.jsx` : Carte de présentation d'un dossier (utilisée dans Dashboard et Calendrier).
+*   `PlanningModal.jsx` : Modale de planification de date.
+*   `SmartAddress.jsx` : Affichage intelligent d'adresse avec lien GPS.
+*   `SignatureCanvas.jsx` : Zone de signature tactile. Devis (PDF OCR/Parser)
+│   │       └── googleDrive.js    # [SERVICE] Google Drive API Integration
+│   ├── utils/
+│   │       ├── googleAuth.js     # [AUTH] Silent Token Refresh Management
+│   │       └── googleCalendar.js # [SERVICE] Google Calendar Integration
 ├── index.html              # Entry Point Web
 ├── vite.config.js          # Build & PWA Configuration
 └── tailwind.config.js      # Design System Tokens
@@ -60,7 +81,13 @@ Les données sont stockées sous forme d'objets JSON dans **IndexedDB** (local) 
 > **Nouveauté v2.1 (Stockage Hybride)** :
 >
 > * **Données Métier (JSON)** : Sync bidirectionnelle Firebase/IndexedDB.
-> * **Fichiers Lourds (PDF)** : Stockage **LOCAL UNIQUEMENT** dans IndexedDB (Store `files`). Pas de sync Cloud pour éviter les timeouts et coûts de bande passante.
+> * **Fichiers Lourds (PDF)** : Stockage **LOCAL** dans IndexedDB (Store `files`) + **CLOUD** Google Drive pour partage multi-utilisateurs.
+
+> **Nouveauté v2.2 (Google Drive Sync)** :
+>
+> * **Devis PDF** : Auto-upload vers Google Drive (`SarangePro/[Client]/`) lors de l'import.
+> * **Partage Multi-Users** : Tous les utilisateurs (bureau + terrain) voient les mêmes devis via Drive API.
+> * **Stockage Dual** : Local (IndexedDB) + Cloud (Drive) pour robustesse offline/online.
 
 ### 🏠 `Chantier` (Dossier Client)
 
@@ -240,10 +267,38 @@ L'utilisateur est informé de l'état de la synchronisation via des indicateurs 
 * 🟠 **Badge Orange / Alert** : Non Synchronisé (Date présente mais pas d'`googleEventId`).
   * *Action* : Un clic sur l'alerte lance une **Force Sync**.
 
-#### E. Gestion des Tokens (Lazy Auth)
+#### E. Gestion des Tokens (Silent Authentication)
 
-1. **Stockage Volatile** : Token en mémoire uniquement (`gapi.client.setToken`).
-2. **Renouvellement** : Automatique ou via popup si expiré, transparent pour la plupart des actions.
+> **Nouveauté v2.1** : Système de rafraîchissement automatique des tokens Google sans intervention utilisateur.
+
+**Fichier** : [`js/utils/googleAuth.js`](file:///d:/sarange-app/js/utils/googleAuth.js)
+
+**Fonctionnement** :
+
+1. **Initialisation** : Le `tokenClient` (Google Identity Services) est configuré au démarrage.
+2. **Tracking d'Expiration** :
+   * Les tokens Google expirent après 1 heure.
+   * Le timestamp d'expiration est calculé (`now + expires_in - 100s buffer`) et stocké dans `sessionStorage`.
+3. **Silent Refresh** :
+   * Avant chaque appel API (Drive/Calendar), `ensureValidToken()` vérifie l'expiration.
+   * Si expiré : Tente un refresh silencieux via `tokenClient.requestAccessToken({ prompt: '' })`.
+   * Si le refresh silencieux échoue : Fallback vers `prompt: 'consent'` (popup).
+4. **Auto-Refresh au Démarrage** :
+   * Au lancement de l'app, un `refreshAuthToken(true)` est tenté automatiquement.
+   * Si l'utilisateur a une session Google active dans le navigateur, le token est renouvelé sans interaction.
+
+**Exports** :
+
+* `refreshAuthToken(silent)` - Rafraîchit le token manuellement.
+* `isTokenExpired()` - Vérifie si le token actuel est expiré.
+* `ensureValidToken()` - Auto-refresh avant appels API (utilisé partout).
+* `getTokenExpiration()` - Récupère le timestamp d'expiration.
+
+**Avantages** :
+
+* ✅ **Pas de fatigue d'authentification** : L'utilisateur n'est plus interrompu toutes les heures.
+* ✅ **Transparent** : Le refresh se fait en arrière-plan pendant l'utilisation.
+* ✅ **Résilient** : Fallback gracieux vers popup si nécessaire.
 
 ---
 
@@ -318,18 +373,120 @@ Moteur d'extraction chirurgical dédié aux devis Sarange/Artertia.
 4. **Integration** : Ajout au chantier avec notes de traçabilité.
 5. **Traceability Meta** : Extraction du numéro de devis (`referenceDevis`) et stockage du Blob source (`quoteFile`).
 
-### 📂 Visionneuse PDF & Stockage Hybride
+### 📂 Visionneuse PDF & Stockage Hybride (Local + Drive)
 
-Pour garantir la performance mobile et la persistance sans alourdir la sync Firebase :
+> **Nouveauté v2.1** : Système hybride avec fallback automatique Drive + Visionneuse in-app.
 
-* **Stockage** : Les fichiers PDF sont stockés dans un objectStore dédié `files` de IndexedDB via `DB.storeFile(id, blob)`.
-* **Référencement** : Le `Chantier` ne contient que l'ID (`quoteFileId`) et le nom (`quoteFileName`). Le blob lourd n'est jamais envoyé à Firebase.
-* **Conséquence** : Les PDF sont accessibles **uniquement sur l'appareil** où ils ont été importés.
-* **Affichage** : Récupération via `DB.getFile(id)` -> `URL.createObjectURL(blob)`.
-* **Modes d'Import** :
-  1. **Parse & Import** : Extrait les produits et stocke le fichier.
-  2. **Store Only** : Stocke uniquement le fichier pour consultation (pas de création de produits).
-* **Nettoyage** : La suppression du devis entraîne la suppression physique du Blob dans IndexedDB (`DB.deleteFile`).
+#### A. Stockage Dual (IndexedDB + Google Drive)
+
+**Architecture** :
+
+1. **Stockage Local (Prioritaire)** :
+   * Les PDF sont stockés dans IndexedDB (`files` store) via `DB.storeFile(id, blob)`.
+   * Référencés par `quoteFileId` dans le `Chantier`.
+   * **Avantage** : Accès instantané offline, pas de bande passante.
+
+2. **Stockage Cloud (Fallback)** :
+   * Upload automatique vers Google Drive lors de l'import.
+   * Structure hiérarchique : `SarangePro/[Nom Client]/devis.pdf`.
+   * **Avantage** : Partage multi-utilisateurs, backup automatique.
+
+**Fichiers** :
+
+* [`js/services/googleDrive.js`](file:///d:/sarange-app/js/services/googleDrive.js) - Service complet Drive API
+* [`js/components/PDFViewerModal.jsx`](file:///d:/sarange-app/js/components/PDFViewerModal.jsx) - Composant modal
+
+#### B. Flux de Visualisation (Fallback Intelligent)
+
+**Fonction** : `handleViewPdf()` dans `ChantierDetailView.jsx`
+
+```javascript
+1. Tentative IndexedDB (Local)
+   ├─ Succès → Affichage immédiat
+   └─ Échec → Étape 2
+
+2. Fallback Google Drive (Cloud)
+   ├─ getChantierQuotes(chantier) → Liste des PDFs
+   ├─ downloadFileAsBlob(fileId) → Téléchargement binaire
+   ├─ Mise en cache locale automatique
+   └─ Affichage dans la modale
+
+3. Création Blob URL
+   └─ URL.createObjectURL(blob) pour iframe
+```
+
+**Correctif Critique (v2.1)** :
+
+> ⚠️ **Bug résolu** : L'ancienne méthode `gapi.client.drive.files.get({ alt: 'media' })` retournait du texte/base64 au lieu de données binaires, créant des Blob URLs invalides (PDF blanc).
+>
+> ✅ **Solution** : Utilisation de `fetch()` direct avec le token OAuth pour télécharger le véritable blob binaire.
+
+```javascript
+// ❌ AVANT (ne fonctionnait pas)
+const response = await gapi.client.drive.files.get({ fileId, alt: 'media' });
+const blob = new Blob([response.body], { type: 'application/pdf' });
+
+// ✅ APRÈS (fonctionne)
+const response = await fetch(
+  `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+  { headers: { 'Authorization': `Bearer ${token}` } }
+);
+const blob = await response.blob();
+```
+
+#### C. Composant PDFViewerModal
+
+**Props** :
+
+* `isOpen` : Visibilité de la modale
+* `onClose` : Callback de fermeture (+ cleanup automatique du Blob URL)
+* `blobUrl` : URL du blob créée avec `createObjectURL()`
+* `title` : Titre affiché (ex: "Devis - Client X")
+
+**Fonctionnalités** :
+
+* Affichage dans `<iframe>` responsive (85vh)
+* Bouton "Ouvrir dans un nouvel onglet" (fallback si X-Frame-Options bloque)
+* Cleanup automatique : `URL.revokeObjectURL()` à la fermeture
+* Compatible mobile (scroll natif iOS/Android)
+
+#### D. Service Google Drive (`googleDrive.js`)
+
+**Exports Principaux** :
+
+| Fonction | Description |
+|----------|-------------|
+| `getOrCreateFolder(name, parentId)` | Gestion hiérarchique des dossiers |
+| `uploadFile(blob, filename, mimeType, folderId)` | Upload multipart basique |
+| `uploadQuoteToDrive(chantier, blob, filename)` | Upload intelligent avec structure auto |
+| `getChantierQuotes(chantier)` | Liste tous les PDFs d'un client |
+| `downloadFileAsBlob(fileId)` | **Téléchargement binaire corrigé** |
+| `listFilesInFolder(folderId)` | Liste les fichiers d'un dossier |
+
+**Auto-Upload au Import** :
+
+Lors de l'importation d'un devis, le système :
+
+1. Stocke le PDF localement (IndexedDB)
+2. Lance un upload silencieux vers Drive en arrière-plan
+3. Continue sans bloquer l'utilisateur (Fire & Forget)
+
+**Gestion d'Erreur** :
+
+* Échec upload Drive → Pas d'impact (fallback local)
+* Échec téléchargement Drive → Message d'erreur utilisateur
+
+#### E. Modes d'Import
+
+1. **Parse & Import** : Extrait les produits + stocke le fichier (local + Drive)
+2. **Store Only** : Stocke uniquement pour consultation (pas de parsing)
+
+#### F. Nettoyage
+
+* **Suppression Devis** :
+  * Suppression physique IndexedDB (`DB.deleteFile`)
+  * Le fichier Drive reste accessible (pas de suppression auto pour sécurité)
+* **Cleanup Blob URLs** : Automatique à la fermeture de la modale
 
 ---
 

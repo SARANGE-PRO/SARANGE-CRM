@@ -21,6 +21,11 @@ const DashboardView = React.lazy(() => import("./views/DashboardView.jsx").then(
 const ChantierDetailView = React.lazy(() => import("./views/ChantierDetailView.jsx").then(m => ({ default: m.ChantierDetailView })));
 const SettingsView = React.lazy(() => import("./views/SettingsView.jsx").then(m => ({ default: m.SettingsView })));
 const TrashView = React.lazy(() => import("./views/TrashView.jsx").then(m => ({ default: m.TrashView })));
+const CalendarView = React.lazy(() => import("./views/CalendarView.jsx"));
+const MapView = React.lazy(() => import("./views/MapView.jsx"));
+
+// Layout
+import { AppLayout } from "./components/AppLayout.jsx";
 
 const ALLOWED_EMAILS = ['contact@sarange.fr'];
 
@@ -114,6 +119,11 @@ const App = () => {
           }
         }
       }
+      // Restore last navigation tab (calendar, map, dashboard)
+      const lastTab = localStorage.getItem('sarange_last_nav_tab');
+      if (lastTab && ['dashboard', 'calendar', 'map'].includes(lastTab)) {
+        return { view: lastTab, currentChantierId: null };
+      }
     } catch (e) {
       console.warn("Session Restore Fail", e);
     }
@@ -138,6 +148,11 @@ const App = () => {
       lastActive: Date.now()
     };
     localStorage.setItem('sarange_session_v1', JSON.stringify(sessionData));
+
+    // Persist last navigation tab (for main nav views only)
+    if (['dashboard', 'calendar', 'map'].includes(view)) {
+      localStorage.setItem('sarange_last_nav_tab', view);
+    }
   }, [view, st.currentChantierId]);
 
   const showToast = (msg, type = 'success') => setToast({ message: msg, type });
@@ -150,9 +165,23 @@ const App = () => {
     return () => unsub();
   }, []);
 
-  // Init Google Calendar
+  // Init Google Calendar + Silent Token Refresh
   useEffect(() => {
-    initCalendarClient().catch(console.error);
+    const initAuth = async () => {
+      try {
+        await initCalendarClient();
+        // Attempt silent token refresh to restore session
+        // This prevents re-login popup if user has active Google session
+        const { refreshAuthToken } = await import("./utils/googleAuth.js");
+        await refreshAuthToken(true).catch(err => {
+          // Silent fail - user will authenticate when needed
+          console.log("Silent refresh skipped (no active session)");
+        });
+      } catch (err) {
+        console.error("Auth init error:", err);
+      }
+    };
+    initAuth();
   }, []);
 
   const runBoot = async () => {
@@ -590,32 +619,49 @@ const App = () => {
   const LoadingScreen = () => <div className="h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900"><Spinner size={40} className="text-brand-600" /></div>;
 
   return (
-    <AppContext.Provider value={{ state: st, ...act }}>
-      <div className="min-h-screen flex flex-col safe-pb">
-        <ErrorBoundary>
-          <Suspense fallback={<LoadingScreen />}>
+    <AppContext.Provider value={{ state: st, ...act, navigate: setView, setReturnView: (v) => setSt(s => ({ ...s, returnView: v })) }}>
+      <ErrorBoundary>
+        <Suspense fallback={<LoadingScreen />}>
+          <AppLayout currentView={view} onNavigate={setView}>
             {view === 'settings' ?
-              <SettingsView onBack={() => setView('list')} state={st} onImport={act.importData} /> :
+              <SettingsView onBack={() => setView('dashboard')} state={st} onImport={act.importData} /> :
               view === 'trash' ?
-                /* Lazy loading du TrashView qui sera créé juste après */
-                <TrashView onBack={() => setView('list')} state={st} actions={act} /> :
-                !st.currentChantierId ?
-                  <DashboardView
-                    onNew={() => setView('new')}
-                    viewMode={view}
-                    setViewMode={setView}
+                <TrashView onBack={() => setView('dashboard')} state={st} actions={act} /> :
+                view === 'calendar' ?
+                  <CalendarView
                     isDark={dark}
                     toggleDark={() => setDark(!dark)}
                     onOpenSettings={() => setView('settings')}
                     onOpenTrash={() => setView('trash')}
                     isOnline={isOnline}
-                    firebaseConnected={firebaseConnected} // Pass diagnostic prop
+                    firebaseConnected={firebaseConnected}
                   /> :
-                  <ChantierDetailView />}
-          </Suspense>
-        </ErrorBoundary>
-        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      </div>
+                  view === 'map' ?
+                    <MapView
+                      isDark={dark}
+                      toggleDark={() => setDark(!dark)}
+                      onOpenSettings={() => setView('settings')}
+                      onOpenTrash={() => setView('trash')}
+                      isOnline={isOnline}
+                      firebaseConnected={firebaseConnected}
+                    /> :
+                    !st.currentChantierId ?
+                      <DashboardView
+                        onNew={() => setView('new')}
+                        viewMode={view}
+                        setViewMode={setView}
+                        isDark={dark}
+                        toggleDark={() => setDark(!dark)}
+                        onOpenSettings={() => setView('settings')}
+                        onOpenTrash={() => setView('trash')}
+                        isOnline={isOnline}
+                        firebaseConnected={firebaseConnected}
+                      /> :
+                      <ChantierDetailView />}
+          </AppLayout>
+        </Suspense>
+      </ErrorBoundary>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AppContext.Provider>
   );
 };

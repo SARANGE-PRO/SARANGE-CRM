@@ -6,6 +6,7 @@ export const checkUrgency = (chantiers) => {
     if (!chantiers) return 0;
     const now = new Date();
     return chantiers.filter(c => {
+        if (!c || c.deleted || c.purged || c.archived) return false;
         if (c.sendStatus === 'SENT') return false;
 
         // Cas 1: Pas de date, créé il y a > 5 jours

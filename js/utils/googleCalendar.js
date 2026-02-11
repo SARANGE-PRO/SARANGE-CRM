@@ -1,9 +1,14 @@
 /* --- GOOGLE CALENDAR UTILITY (GIS / GAPI) --- */
 
+import { ensureValidToken } from './googleAuth.js';
+
 const CLIENT_ID = "699593246334-05mr710cpof5efgbgra54mpoog2ghma7.apps.googleusercontent.com";
 const API_KEY = "AIzaSyAFfQEdzncY0XpTfsuYikj7oVP6uLHj7PE";
-const SCOPES = "https://www.googleapis.com/auth/calendar";
-const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"];
+const SCOPES = "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive.file";
+const DISCOVERY_DOCS = [
+    "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
+    "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"
+];
 
 let tokenClient;
 let gapiInited = false;
@@ -36,7 +41,7 @@ export const initCalendarClient = () => {
 
         function maybeResolve() {
             if (gapiInited && gisInited) {
-                console.log("✅ Google Calendar API (GIS) : Prêt");
+                console.log("✅ Google Calendar & Drive API (GIS) : Prêt");
                 resolve();
             }
         }
@@ -64,6 +69,8 @@ export const initCalendarClient = () => {
                     scope: SCOPES,
                     callback: '', // Défini dynamiquement lors de la demande
                 });
+                // Expose globally for auth utilities
+                window.tokenClient = tokenClient;
                 gisInited = true;
                 maybeResolve();
             } catch (err) {
@@ -88,15 +95,12 @@ export const manageGoogleEvent = async (chantier) => {
         return null;
     }
 
-    // 2. Vérifier si on a un token valide (Token Model)
-    if (!window.gapi.client.getToken()) {
-        console.log("🔒 Demande de permission Google...");
-        try {
-            await requestAccessToken();
-        } catch (e) {
-            console.warn("Auth refusée ou fermée", e);
-            return null;
-        }
+    // 2. Ensure valid token (auto-refresh if expired)
+    try {
+        await ensureValidToken();
+    } catch (e) {
+        console.warn("Auth refusée ou fermée", e);
+        return null;
     }
 
     // 3. Logique Métrage vs Pose
@@ -197,9 +201,11 @@ export const deleteGoogleEvent = async (chantier) => {
     try {
         await initCalendarClient();
 
-        if (!window.gapi.client.getToken()) {
-            // Si pas de token, on ne force pas la popup à la suppression (trop intrusif)
-            // On log juste et on abandonne (fail soft)
+        // Ensure valid token (silent refresh if needed)
+        try {
+            await ensureValidToken();
+        } catch (e) {
+            // Silent fail - don't force popup on delete
             console.warn("Pas de token, suppression GCal ignorée");
             return;
         }
@@ -224,7 +230,7 @@ export const deleteGoogleEvent = async (chantier) => {
 
 // --- HELPERS ---
 
-function requestAccessToken() {
+export function requestAccessToken() {
     return new Promise((resolve, reject) => {
         tokenClient.callback = (resp) => {
             if (resp.error) {

@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sun, Moon, Settings, Search, Plus, MapPin, Phone, Mail, UserCheck, CheckCircle, AlertCircle, AlertTriangle, Clock, Copy, Trash2, Archive, Menu, LogOut, Cloud, CloudOff, Calendar, ArrowRight } from 'lucide-react';
+import { Plus, AlertCircle, Search, CheckCircle, Calendar, Phone, Copy, Trash2, ArrowRight, UserCheck } from 'lucide-react';
+import { AppHeader } from "../components/AppHeader.jsx";
 import { Button } from "../components/ui/Button.jsx";
 import { checkUrgency } from "../utils/calendar.js";
 import { Input } from "../components/ui/Input.jsx";
 import { SelectToggle } from "../components/ui/SelectToggle.jsx";
 import { Card } from "../components/ui/Card.jsx";
+import { ChantierCard } from "../components/ChantierCard.jsx";
 import { StatusBanner } from "../components/ui/StatusBanner.jsx";
 import { AddressInput } from "../components/ui/AddressInput.jsx";
 import { SmartAddress } from "../components/ui/SmartAddress.jsx";
@@ -130,102 +132,13 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
 
     // --- RENDER HELPERS ---
 
-    const ChantierCard = ({ c, isTodo = false }) => {
-        const isUrgent = (!c.dateIntervention && c.sendStatus !== 'SENT') && (Date.now() - new Date(c.date).getTime() > 5 * 24 * 60 * 60 * 1000);
-        return (
-            <div
-                onClick={() => selectChantier(c.id)}
-                className={`relative group bg-white dark:bg-slate-900 p-4 rounded-xl border shadow-sm hover:shadow-md active:scale-[0.99] transition-all cursor-pointer overflow-hidden mb-3
-                    ${c.sendStatus === 'SENT' ? 'border-green-200 dark:border-green-800 opacity-75 hover:opacity-100' :
-                        isUrgent ? 'border-red-400 dark:border-red-500 ring-1 ring-red-400 dark:ring-red-500' :
-                            'border-slate-200 dark:border-slate-800 hover:border-brand-400 dark:hover:border-brand-600'}
-                `}
-            >
-                {isUrgent && <div className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">URGENT</div>}
-
-                <div className="flex justify-between items-start mb-2">
-                    <div className="font-bold text-lg dark:text-white truncate pr-2">{c.client}</div>
-                    {c.sendStatus === 'SENT' && <CheckCircle size={16} className="text-green-500" />}
-                </div>
-
-                <div className="text-sm text-slate-500 mb-3 ml-[-5px]">
-                    <SmartAddress address={c.adresse} gps={c.gps} />
-                </div>
-
-                {/* Info Date/Tel */}
-                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 flex items-center justify-between mb-3 text-sm">
-                    {c.dateIntervention ? (
-                        <div className="flex flex-col">
-                            <span className="text-[10px] text-slate-400 uppercase font-bold">Intervention</span>
-                            <span className="font-bold text-brand-600 dark:text-brand-400 flex items-center gap-1">
-                                <Calendar size={14} />
-                                {new Date(c.dateIntervention).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
-                            </span>
-                        </div>
-                    ) : (
-                        <div className="flex flex-col">
-                            <span className="text-[10px] text-slate-400 uppercase font-bold">Créé le</span>
-                            <span className="font-bold text-slate-600 dark:text-slate-300">
-                                {new Date(c.date).toLocaleDateString('fr-FR')}
-                            </span>
-                        </div>
-                    )}
-                    <div className="flex items-center gap-1 ml-auto">
-                        {/* GCal Status Indicator */}
-                        {c.dateIntervention && (
-                            <div title={c.googleEventId ? "Synchronisé Google Calendar" : "Non synchronisé Google Calendar"} className="ml-1">
-                                {c.googleEventId ? (
-                                    <img src="https://www.gstatic.com/images/branding/product/1x/calendar_2020q4_48dp.png" alt="GCal OK" className="w-4 h-4 opacity-80" />
-                                ) : (
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            // Force Sync via Centralized Function
-                                            updateChantierDate(c.id, c.dateIntervention);
-                                        }}
-                                        className="text-orange-400 hover:text-orange-600 animate-pulse"
-                                        title="Cliquez pour forcer la synchro Google"
-                                    >
-                                        <AlertTriangle size={14} />
-                                    </button>
-                                )}
-                            </div>
-                        )}
-                        {c.telephone && (
-                            <a href={`tel:${c.telephone}`} onClick={e => e.stopPropagation()} className="bg-white dark:bg-slate-700 p-2 rounded-full text-slate-600 dark:text-slate-300 shadow-sm border border-slate-100 dark:border-slate-600 hover:text-brand-600 hover:border-brand-600 transition-colors">
-                                <Phone size={16} />
-                            </a>
-                        )}
-                    </div>
-                </div>
-
-                {/* Actions Specific for TODO */}
-                {isTodo && (
-                    <div className="flex gap-2 mt-2">
-                        <Button
-                            className="flex-1 py-2 text-xs bg-brand-600 text-white shadow-md hover:bg-brand-700 h-10"
-                            onClick={(e) => { e.stopPropagation(); setPlanningId(c.id); }}
-                            icon={Calendar}
-                        >
-                            PLANIFIER
-                        </Button>
-                    </div>
-                )}
-
-                <div className="flex items-center justify-end pt-2 mt-2 border-t border-slate-100 dark:border-slate-800 gap-2">
-                    <button onClick={(e) => { e.stopPropagation(); duplicateChantier(c.id) }} className="text-slate-400 hover:text-brand-500"><Copy size={16} /></button>
-                    <button onClick={(e) => { e.stopPropagation(); if (confirm('Supprimer ?')) deleteChantier(c.id) }} className="text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>
-                </div>
-            </div>
-        );
-    };
-
     const PlanningGroup = ({ title, items, color }) => {
         if (items.length === 0) return null;
         return (
             <div className="mb-4">
+                {/* ChantierCard imports its own onClick handlers from props or defaults to context if not provided */}
                 <h4 className={`text-xs font-bold uppercase tracking-wider mb-2 ${color}`}>{title}</h4>
-                {items.map(c => <ChantierCard key={c.id} c={c} />)}
+                {items.map(c => <ChantierCard key={c.id} c={c} onClick={() => selectChantier(c.id)} />)}
             </div>
         );
     };
@@ -233,47 +146,22 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
     // --- MAIN RENDER ---
 
     return (
-        <div className="flex flex-col h-screen lg:h-screen supports-[height:100dvh]:h-[100dvh] w-full bg-slate-50 dark:bg-slate-900 overflow-hidden">
+        <div className="flex flex-col h-full w-full bg-slate-50 dark:bg-slate-900 overflow-hidden">
             {/* HEADER (Sticky Removed -> Flex Item) */}
-            <header className="flex-none z-20 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 pb-3 safe-top-padding shadow-sm">
-                <div className="flex justify-between items-center mb-4 w-full mx-auto pt-2">
-                    <div className="flex items-center gap-2">
-                        <img src="/favicon-512.png" alt="Logo" className="w-8 h-8 object-contain rounded-lg" />
-                        <h1 className="text-xl font-bold tracking-tight">Sarange<span className="text-brand-600">Metrage</span></h1>
-                    </div>
-                    <div className="flex gap-2 relative" ref={wrapperRef}>
-                        {/* SYNC STATUS ICON */}
-                        {isOnline ? (
-                            firebaseConnected ? (
-                                <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-full" title="Connecté au Cloud">
-                                    <Cloud size={20} className="text-green-500" />
-                                </div>
-                            ) : (
-                                <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-full animate-pulse" title="Problème de connexion Firebase (Quota/Réseau)">
-                                    <AlertCircle size={20} className="text-orange-500" />
-                                </div>
-                            )
-                        ) : (
-                            <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full" title="Hors Connexion">
-                                <CloudOff size={20} className="text-slate-400" />
-                            </div>
-                        )}
-                        <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
-                            <Menu size={20} />
-                        </button>
-                        {menuOpen && (
-                            <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-50 animate-fade-in origin-top-right">
-                                <div className="p-2 space-y-1">
-                                    <button onClick={toggleDark} className="w-full flex items-center px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors">{isDark ? <Sun size={16} className="mr-3 text-orange-400" /> : <Moon size={16} className="mr-3 text-brand-600" />}{isDark ? 'Mode Clair' : 'Mode Sombre'}</button>
-                                    <div className="h-px bg-slate-100 dark:bg-slate-700 my-1"></div>
-                                    <button onClick={() => { setShowArchived(!showArchived); setMenuOpen(false); }} className={`w-full flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${showArchived ? 'bg-brand-50 text-brand-700' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50'}`}><Archive size={16} className="mr-3" />{showArchived ? 'Voir Dossiers Actifs' : 'Voir Archives'}<span className="ml-auto text-xs bg-slate-100 px-1.5 rounded-full">{countArchived}</span></button>
-                                    <button onClick={() => { onOpenTrash(); setMenuOpen(false); }} className="w-full flex items-center px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg"><Trash2 size={16} className="mr-3 text-red-500" />Corbeille</button>
-                                    <button onClick={() => { onOpenSettings(); setMenuOpen(false); }} className="w-full flex items-center px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg"><Settings size={16} className="mr-3" />Paramètres</button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
+            <AppHeader
+                isDark={isDark}
+                toggleDark={toggleDark}
+                onOpenSettings={onOpenSettings}
+                onOpenTrash={onOpenTrash}
+                showArchived={showArchived}
+                setShowArchived={setShowArchived}
+                countArchived={countArchived}
+                isOnline={isOnline}
+                firebaseConnected={firebaseConnected}
+            />
+
+            {/* SEARCH BAR (Distinct from Header in Dashboard) */}
+            <div className="flex-none bg-white dark:bg-slate-900 px-4 pt-3 pb-3 border-b border-slate-200 dark:border-slate-800">
                 <div className="w-full mx-auto relative flex gap-2">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-3 text-slate-400" size={20} />
@@ -281,7 +169,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                     </div>
                     <Button onClick={() => setM(true)} icon={Plus} className="py-2 text-sm shadow-sm whitespace-nowrap px-4">Nouveau</Button>
                 </div>
-            </header>
+            </div>
 
             {/* MAIN CONTENT AREA (Flex Grow) */}
             <main className="flex-1 min-h-0 overflow-y-auto pb-40 lg:pb-0 w-full mx-auto">
@@ -321,7 +209,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                             {todoChantiers.length === 0 ? (
                                 <div className="text-center p-8 text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200">Aucun dossier en attente</div>
                             ) : (
-                                todoChantiers.map(c => <ChantierCard key={c.id} c={c} isTodo={true} />)
+                                todoChantiers.map(c => <ChantierCard key={c.id} c={c} isTodo={true} onPlanifier={(id) => setPlanningId(id)} />)
                             )}
                         </div>
                     </div>
@@ -389,9 +277,6 @@ export const NewChantierModal = ({ onClose }) => {
         telephone: '',
         email: '',
         clientFinal: '',
-        telephone: '',
-        email: '',
-        clientFinal: '',
         adresseFinale: '',
         notes: ''
     });
@@ -419,10 +304,23 @@ export const NewChantierModal = ({ onClose }) => {
             quoteFileId,
             quoteFileName: file ? file.name : null
         };
-        addChantier(newChantier);
+        const createdChantier = addChantier(newChantier);
         onClose();
 
-        // 2. Synchro Google Calendar (Arrière-plan silencieux)
+        // 2. Auto-upload to Drive (background)
+        if (file && quoteFileId) {
+            const { uploadQuoteToDrive } = await import("../services/googleDrive.js");
+            uploadQuoteToDrive(createdChantier || newChantier, file, file.name)
+                .then(result => {
+                    console.log(`✅ Quote auto-uploaded to Drive: ${result.filename}`);
+                })
+                .catch(error => {
+                    console.error("Drive auto-upload failed:", error);
+                    // Silent fail - local storage is primary
+                });
+        }
+
+        // 3. Synchro Google Calendar (Arrière-plan silencieux)
         // Note : NewChantierModal n'a pas de champ dateIntervention actuellement.
         // On ne tente la synchro que si une date est définie (futur support)
         if (newChantier.dateIntervention) {
@@ -503,4 +401,3 @@ export const NewChantierModal = ({ onClose }) => {
         </div>
     );
 };
-

@@ -13,6 +13,7 @@ import { useApp } from "../context.js";
 import { ProductEditor } from "../components/ProductEditor.jsx";
 import { EditChantierModal } from "../components/EditChantierModal.jsx";
 import { QuoteImportModal } from "./QuoteImportModal.jsx";
+import { PDFViewerModal } from "../components/PDFViewerModal.jsx";
 import { generateUUID, buildOptionsString, getChantierStep } from "../utils.js";
 
 // Mapping Centralisé Sarange Parser V5 -> App Types
@@ -43,6 +44,7 @@ const mapQuoteTypeToAppType = (quoteType, subtype) => {
 };
 import { generateReportHTML } from "../reports.js";
 import { Logger, DB } from "../db.js";
+import { uploadQuoteToDrive, getChantierQuotes, downloadFileAsBlob } from "../services/googleDrive.js";
 
 const HistorySection = ({ history }) => {
     if (!history?.length) return null;
@@ -394,7 +396,7 @@ const UnlockModal = ({ onClose, onUnlock }) => {
 
 
 export const ChantierDetailView = () => {
-    const { state, selectChantier, deleteProduct, saveProduct, updateChantier, updateChantierDate } = useApp();
+    const { state, selectChantier, deleteProduct, saveProduct, updateChantier, updateChantierDate, navigate, setReturnView } = useApp();
     const [edt, setEdt] = useState(null);
     const [showConfirm, setShowConfirm] = useState(false);
     const [showUnlock, setShowUnlock] = useState(false);
@@ -404,9 +406,31 @@ export const ChantierDetailView = () => {
     const [toast, setToast] = useState(null);
     const [showUnverifiedWarning, setShowUnverifiedWarning] = useState(false);
     const [pdfBlob, setPdfBlob] = useState(null);
+    const [driveQuotes, setDriveQuotes] = useState([]);
+    const [loadingDriveQuotes, setLoadingDriveQuotes] = useState(false);
+    const [showPDFModal, setShowPDFModal] = useState(false);
+    const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
 
     const ch = state.chantiers.find(c => c.id === state.currentChantierId);
     if (ch && ch.deleted) return null; // Sécurité si le chantier courant vient d'être supprimé (synchro)
+
+    // Preload PDF blob from IndexedDB when chantier changes
+    React.useEffect(() => {
+        const loadPdfFromIndexedDB = async () => {
+            if (ch?.quoteFileId && !pdfBlob) {
+                try {
+                    const file = await DB.getFile(ch.quoteFileId);
+                    if (file) {
+                        setPdfBlob(file);
+                        console.log("📄 PDF preloaded from IndexedDB");
+                    }
+                } catch (err) {
+                    console.warn("Failed to preload PDF from IndexedDB:", err);
+                }
+            }
+        };
+        loadPdfFromIndexedDB();
+    }, [ch?.id, ch?.quoteFileId]);
 
     const prds = (state.products || []).filter(p => p.chantierId === ch?.id && !p.deleted).sort((a, b) => a.index - b.index);
 
@@ -505,6 +529,70 @@ export const ChantierDetailView = () => {
     };
 
     /**
+     * Handles viewing the PDF quote
+     * Priority: IndexedDB (local) → Drive API (cloud fallback)
+     */
+    const handleViewPdf = async () => {
+        try {
+            let blob = null;
+
+            // 1. Priority: Try IndexedDB first (local storage)
+            if (ch.quoteFileId) {
+                try {
+                    blob = await DB.getFile(ch.quoteFileId);
+                    if (blob) {
+                        console.log("📄 PDF loaded from IndexedDB");
+                    }
+                } catch (err) {
+                    console.warn("Failed to load from IndexedDB:", err);
+                }
+            }
+
+            // 2. Fallback: Try Drive API if local not found
+            if (!blob) {
+                // Check if we have Drive quotes
+                const quotes = await getChantierQuotes(ch);
+
+                if (quotes && quotes.length > 0) {
+                    const driveFileId = quotes[0].id;
+                    console.log(`📥 Downloading PDF from Drive (${driveFileId})...`);
+
+                    try {
+                        blob = await downloadFileAsBlob(driveFileId);
+                        console.log("✅ PDF downloaded from Drive");
+
+                        // Optionally: Store in IndexedDB for next time
+                        if (ch.quoteFileId) {
+                            await DB.storeFile(ch.quoteFileId, blob);
+                            console.log("💾 PDF cached locally");
+                        }
+                    } catch (driveErr) {
+                        console.error("Drive download failed:", driveErr);
+                        throw new Error("Impossible de télécharger le fichier depuis Drive");
+                    }
+                } else {
+                    throw new Error("Fichier non disponible (ni local, ni Drive)");
+                }
+            }
+
+            // 3. Create Blob URL and show modal
+            if (blob) {
+                const blobUrl = URL.createObjectURL(blob);
+                setPdfBlobUrl(blobUrl);
+                setShowPDFModal(true);
+            } else {
+                throw new Error("Aucun fichier disponible");
+            }
+        } catch (error) {
+            console.error("Error viewing PDF:", error);
+            setToast({
+                message: error.message || "Erreur lors de l'ouverture du PDF",
+                type: "error"
+            });
+        }
+    };
+
+    /**
      * Gère l'importation des items du devis.
      * Mappe les QuoteItems vers le format Product de la BDD.
      */
@@ -589,11 +677,43 @@ export const ChantierDetailView = () => {
         if (fileId) {
             // Update local view immediately
             setPdfBlob(file);
+
+            // 🚀 AUTO-UPLOAD TO DRIVE (Silent Background)
+            uploadQuoteToDrive(ch, file, file.name)
+                .then(result => {
+                    console.log(`✅ Quote auto-uploaded to Drive: ${result.filename}`);
+                    loadDriveQuotes();
+                })
+                .catch(error => {
+                    console.error("Drive auto-upload failed:", error);
+                    // Silent fail - local storage is primary
+                });
         }
 
         setShowImport(false);
         setToast({ message: `${newProducts.length} menuiseries importées avec succès !`, type: 'success' });
     };
+
+    // Load Drive quotes
+    const loadDriveQuotes = async () => {
+        if (!ch) return;
+
+        setLoadingDriveQuotes(true);
+        try {
+            const quotes = await getChantierQuotes(ch);
+            setDriveQuotes(quotes);
+        } catch (error) {
+            console.error("Failed to load Drive quotes:", error);
+        } finally {
+            setLoadingDriveQuotes(false);
+        }
+    };
+
+    React.useEffect(() => {
+        if (ch && !isLocked) {
+            loadDriveQuotes();
+        }
+    }, [ch?.id]);
 
     const handleStepNavigation = (stepId) => {
         let targetId = '';
@@ -634,12 +754,19 @@ export const ChantierDetailView = () => {
     const hasUnverified = unverifiedCount > 0;
 
     return (
-        <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-950">
+        <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950">
             {/* ... Header remains همان ... */}
-            <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10 shadow-sm safe-top-padding">
-                <div className="px-4 py-3 flex items-center justify-between">
+            <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10 shadow-sm h-[calc(64px+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex flex-col justify-center overflow-hidden">
+                <div className="px-4 flex items-center justify-between w-full">
                     <div className="flex items-center flex-1 min-w-0">
-                        <button onClick={() => selectChantier(null)} className="mr-3 p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-200"><ArrowLeft size={24} /></button>
+                        <button onClick={() => {
+                            if (state.returnView) {
+                                navigate(state.returnView);
+                                setReturnView(null);
+                            } else {
+                                selectChantier(null);
+                            }
+                        }} className="mr-3 p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-200"><ArrowLeft size={24} /></button>
                         <div className="truncate flex-1 cursor-pointer" onClick={() => !isLocked && setIed(true)}>
                             <div className="flex items-center gap-2">
                                 <h2 className="font-bold text-lg dark:text-white truncate">{ch.client}</h2>
@@ -668,15 +795,7 @@ export const ChantierDetailView = () => {
                                 size="sm"
                                 className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-200"
                                 icon={FileText}
-                                onClick={() => {
-                                    const blobToUse = pdfBlob || ch.quoteFile;
-                                    if (blobToUse) {
-                                        const url = URL.createObjectURL(blobToUse);
-                                        setPdfUrl(url);
-                                    } else {
-                                        setToast({ message: "Fichier non disponible localement", type: "warning" });
-                                    }
-                                }}
+                                onClick={handleViewPdf}
                             >
                                 <span className="hidden sm:inline">Voir le Devis</span>
                             </Button>
@@ -916,40 +1035,17 @@ export const ChantierDetailView = () => {
             {showImport && <QuoteImportModal onClose={() => setShowImport(false)} onImport={handleImport} />}
             {ied && <EditChantierModal chantier={ch} onClose={() => setIed(false)} onUpdate={d => updateChantier(ch.id, d)} />}
 
-            {/* Preview PDF Modal (Mobile Safe) */}
-            {pdfUrl && (
-                <Modal
-                    isOpen={true}
+            {/* PDF Viewer Modal */}
+            {showPDFModal && pdfBlobUrl && (
+                <PDFViewerModal
+                    isOpen={showPDFModal}
                     onClose={() => {
-                        URL.revokeObjectURL(pdfUrl);
-                        setPdfUrl(null);
+                        setShowPDFModal(false);
+                        setPdfBlobUrl(null);
                     }}
+                    blobUrl={pdfBlobUrl}
                     title={`Devis - ${ch.referenceDevis || ch.client}`}
-                    size="6xl"
-                >
-                    <div className="flex flex-col h-[85vh]">
-                        {/* Header for Mobile Fallback */}
-                        <div className="flex justify-end p-2 border-b dark:border-slate-800">
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                icon={ExternalLink}
-                                onClick={() => window.open(pdfUrl, '_blank')}
-                                className="text-brand-600 dark:text-brand-400 font-bold"
-                            >
-                                Ouvrir dans un nouvel onglet
-                            </Button>
-                        </div>
-                        {/* Iframe for Embedded View */}
-                        <div className="flex-1 w-full bg-slate-100 dark:bg-slate-800 rounded-b-lg overflow-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-                            <iframe
-                                src={pdfUrl}
-                                className="w-full h-full border-0"
-                                title="Aperçu du Devis"
-                            />
-                        </div>
-                    </div>
-                </Modal>
+                />
             )}
 
             {/* Toast */}
