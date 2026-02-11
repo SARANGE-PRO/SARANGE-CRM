@@ -133,7 +133,7 @@ export const manageGoogleEvent = async (chantier) => {
     const eventResource = {
         summary: titre,
         location: chantier.adresse || '',
-        description: `Client: ${chantier.client}\nTél: ${chantier.telephone || ''}\nLien GPS: https://waze.com/ul?q=${encodeURIComponent(chantier.adresse || '')}`,
+        description: `Client: ${chantier.client}\nTél: ${chantier.telephone || ''}${chantier.notes ? `\n\n📝 Notes :\n${chantier.notes}` : ''}\n\nLien GPS: https://waze.com/ul?q=${encodeURIComponent(chantier.adresse || '')}`,
         start: { dateTime: startDateTime.toISOString(), timeZone: 'Europe/Paris' },
         end: { dateTime: endDateTime.toISOString(), timeZone: 'Europe/Paris' },
         colorId: colorId,
@@ -249,3 +249,33 @@ async function getOrCreateCalendarId(name) {
     });
     return created.result.id;
 }
+
+/**
+ * Vérifie si un événement existe toujours côté Google
+ * @param {string} eventId
+ * @param {object} chantier (pour savoir si Metrage ou Pose)
+ * @returns {Promise<boolean>}
+ */
+export const verifyEventExists = async (eventId, chantier) => {
+    if (!eventId) return false;
+    try {
+        await initCalendarClient();
+        if (!window.gapi.client.getToken()) {
+            // Tente un silent refresh si possible, sinon fail
+            try { await requestAccessToken(); } catch { return false; }
+        }
+
+        const isMetrage = !chantier.datePose && (chantier.status !== 'POSE');
+        const calendarName = isMetrage ? "Sarange - Métrages" : "Sarange - Pose";
+        const calendarId = await getOrCreateCalendarId(calendarName);
+
+        const res = await window.gapi.client.calendar.events.get({
+            calendarId: calendarId,
+            eventId: eventId
+        });
+        return res.result && res.result.status !== 'cancelled';
+    } catch (e) {
+        console.warn("Event Check Fail", e);
+        return false;
+    }
+};

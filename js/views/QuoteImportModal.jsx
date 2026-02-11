@@ -14,6 +14,8 @@ export const QuoteImportModal = ({ onClose, onImport }) => {
     const [selectedIds, setSelectedIds] = useState(() => new Set());
     const [error, setError] = useState(null);
 
+    const [importMode, setImportMode] = useState('PARSE'); // 'PARSE' | 'STORE'
+
     const inputRef = useRef(null);
 
     const resetState = () => {
@@ -46,7 +48,6 @@ export const QuoteImportModal = ({ onClose, onImport }) => {
 
         if (!isPdfFile(file)) {
             setError("Le fichier doit être un PDF.");
-            // reset input pour permettre re-choix immédiat
             if (inputRef.current) inputRef.current.value = "";
             return;
         }
@@ -60,13 +61,18 @@ export const QuoteImportModal = ({ onClose, onImport }) => {
         setError(null);
         setParsedItems([]);
         setSelectedIds(new Set());
+        setCurrentFile(file);
+
+        if (importMode === 'STORE') {
+            setIsLoading(false);
+            return;
+        }
 
         try {
             const data = await QuoteParserService.parseQuote(file);
 
             setParsedItems(data.items);
             setParsedMeta(data.meta);
-            setCurrentFile(file);
 
             // Sélection par défaut : tout sélectionner
             setSelectedIds(new Set(data.items.map((it) => it.id)));
@@ -106,20 +112,65 @@ export const QuoteImportModal = ({ onClose, onImport }) => {
     };
 
     const handleImportClick = () => {
-        const selectedItems = parsedItems.filter((it) => selectedIds.has(it.id));
-        onImport(selectedItems, currentFile, parsedMeta);
+        if (importMode === 'STORE') {
+            // Pass empty items, but file is present
+            onImport([], currentFile, null);
+        } else {
+            const selectedItems = parsedItems.filter((it) => selectedIds.has(it.id));
+            onImport(selectedItems, currentFile, parsedMeta);
+        }
     };
 
     const isAllSelected = useMemo(() => {
         return parsedItems.length > 0 && selectedIds.size === parsedItems.length;
     }, [parsedItems.length, selectedIds.size]);
 
+    // Helper to determine if we can import
+    const canImport = useMemo(() => {
+        if (!currentFile) return false;
+        if (importMode === 'STORE') return true;
+        return parsedItems.length > 0 && selectedIds.size > 0;
+    }, [currentFile, importMode, parsedItems.length, selectedIds.size]);
+
     return (
-        <Modal isOpen={true} onClose={onClose} title="Importer depuis un devis PDF" size="lg">
+        <Modal isOpen={true} onClose={onClose} title="Importer / Stocker un devis" size="lg">
             <div className="flex flex-col h-[600px]">
 
+                {/* Mode Selection */}
+                {!currentFile && (
+                    <div className="px-6 pt-4 pb-2">
+                        <div className="flex gap-4 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                            <button
+                                onClick={() => setImportMode('PARSE')}
+                                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${importMode === 'PARSE'
+                                        ? 'bg-white dark:bg-slate-700 shadow-sm text-brand-600 dark:text-brand-400'
+                                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                    }`}
+                            >
+                                Analyser & Importer
+                            </button>
+                            <button
+                                onClick={() => setImportMode('STORE')}
+                                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${importMode === 'STORE'
+                                        ? 'bg-white dark:bg-slate-700 shadow-sm text-brand-600 dark:text-brand-400'
+                                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                    }`}
+                            >
+                                Stocker uniquement
+                            </button>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-2 px-1">
+                            {importMode === 'PARSE'
+                                ? "Extrait les menuiseries du PDF pour créer les produits automatiquement."
+                                : "Stocke simplement le fichier PDF dans le dossier (Consultable hors-ligne, pas de création de produits)."
+                            }
+                        </p>
+                    </div>
+                )}
+
+
                 {/* Zone d'Upload */}
-                {parsedItems.length === 0 && !isLoading && (
+                {!currentFile && !isLoading && (
                     <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900 m-4">
                         <input
                             ref={inputRef}
@@ -138,7 +189,7 @@ export const QuoteImportModal = ({ onClose, onImport }) => {
                             </h3>
                             <p className="text-slate-500 text-sm text-center max-w-xs">
                                 Formats supportés : PDF uniquement.<br />
-                                Nous analyserons le contenu pour extraire les menuiseries.
+                                {importMode === 'PARSE' ? 'Analyse automatique des menuiseries.' : 'Stockage sécurisé locale.'}
                             </p>
                         </label>
 
@@ -160,8 +211,31 @@ export const QuoteImportModal = ({ onClose, onImport }) => {
                     </div>
                 )}
 
-                {/* Preview Table */}
-                {parsedItems.length > 0 && (
+                {/* STORE MODE: PREVIEW FILE ONLY */}
+                {currentFile && importMode === 'STORE' && (
+                    <div className="flex-1 flex flex-col items-center justify-center m-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm text-center">
+                            <FileText size={64} className="text-brand-500 mx-auto mb-4" />
+                            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-1">
+                                {currentFile.name}
+                            </h3>
+                            <p className="text-slate-500 mb-6">
+                                {(currentFile.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
+
+                            <Button variant="ghost" size="sm" onClick={resetState}>
+                                Changer de fichier
+                            </Button>
+                        </div>
+                        <div className="mt-8 text-center max-w-md text-slate-500 text-sm">
+                            <CheckCircle className="inline-block text-green-500 mr-2" size={16} />
+                            Le fichier sera stocké localement et lié à ce chantier.
+                        </div>
+                    </div>
+                )}
+
+                {/* PARSE MODE: PREVIEW TABLE */}
+                {currentFile && importMode === 'PARSE' && parsedItems.length > 0 && (
                     <div className="flex-1 overflow-hidden flex flex-col">
                         <div className="flex justify-between items-center px-4 py-3 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
                             <div className="flex items-center gap-2">
@@ -272,11 +346,11 @@ export const QuoteImportModal = ({ onClose, onImport }) => {
                     <Button variant="ghost" onClick={onClose}>Annuler</Button>
                     <Button
                         variant="primary"
-                        disabled={parsedItems.length === 0 || selectedIds.size === 0}
+                        disabled={!canImport}
                         onClick={handleImportClick}
                         icon={CheckCircle}
                     >
-                        Importer {selectedIds.size} produit(s)
+                        {importMode === 'STORE' ? "Stocker le fichier" : `Importer ${selectedIds.size} produit(s)`}
                     </Button>
                 </div>
             </div>

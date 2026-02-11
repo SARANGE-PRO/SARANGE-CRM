@@ -8,10 +8,16 @@ import { AddressInput } from "./ui/AddressInput.jsx"; // Adjusted path
 // AddToCalendarBtn path: js/components/AddToCalendarBtn.jsx
 // This file is in js/components/EditChantierModal.jsx ? No, I'll put it in js/components/
 import AddToCalendarBtn from "./AddToCalendarBtn.jsx";
-import { manageGoogleEvent } from "../utils/googleCalendar.js";
+import { manageGoogleEvent, deleteGoogleEvent } from "../utils/googleCalendar.js";
+import { DB } from "../db.js";
+import { generateUUID } from "../utils.js";
+import { Trash2, FileText, Upload } from 'lucide-react';
 
 export const EditChantierModal = ({ chantier, onClose, onUpdate }) => {
     const [f, setF] = useState({ ...chantier });
+    const [newFile, setNewFile] = useState(null);
+    const [deleteExisting, setDeleteExisting] = useState(false);
+
     const setAddr = (v, field = 'adresse') => {
         if (typeof v === 'object') setF({ ...f, [field]: v.address, gps: v.gps });
         else setF({ ...f, [field]: v });
@@ -21,8 +27,33 @@ export const EditChantierModal = ({ chantier, onClose, onUpdate }) => {
         if (!f.client) return alert('Nom requis');
         if (f.typeContrat === 'SOUS_TRAITANCE' && (!f.clientFinal || !f.adresseFinale)) return alert('Client final requis');
 
-        // 1. Mise à jour Locale (Immédiate)
-        onUpdate(f);
+        // 1. Gestion des Fichiers (DB Locale)
+        let updatedChantier = { ...f };
+
+        // Cas suppression explicite
+        if (deleteExisting && chantier.quoteFileId) {
+            await DB.deleteFile(chantier.quoteFileId);
+            updatedChantier.quoteFileId = null;
+            updatedChantier.quoteFileName = null;
+            updatedChantier.quoteFile = null; // Clean legacy
+        }
+
+        // Cas nouveau fichier
+        if (newFile) {
+            // Si on remplace un fichier existant (sans l'avoir supprimé explicitement avant)
+            if (chantier.quoteFileId && !deleteExisting) {
+                await DB.deleteFile(chantier.quoteFileId);
+            }
+
+            const newId = generateUUID();
+            await DB.storeFile(newId, newFile);
+            updatedChantier.quoteFileId = newId;
+            updatedChantier.quoteFileName = newFile.name;
+            updatedChantier.quoteFile = null; // Clean legacy
+        }
+
+        // 2. Mise à jour Locale (Immédiate)
+        onUpdate(updatedChantier);
         onClose();
 
         // 2. Synchro Google Calendar (Arrière-plan silencieux)
@@ -30,11 +61,20 @@ export const EditChantierModal = ({ chantier, onClose, onUpdate }) => {
             try {
                 const eventId = await manageGoogleEvent(f);
                 if (eventId && eventId !== f.googleEventId) {
-                    onUpdate({ ...f, googleEventId: eventId });
+                    // Update local state with new Event ID (via parent)
+                    // Note: onUpdate is usually updateChantier
+                    // We need to be careful not to cycle, but usually safe
+                    onUpdate({ ...updatedChantier, googleEventId: eventId });
                 }
             } catch (e) {
                 console.error("Silent GCal Sync Fail", e);
             }
+        } else if (f.googleEventId) {
+            // Cas : Date supprimée => On supprime l'événement Google
+            try {
+                deleteGoogleEvent(f).catch(console.error);
+                onUpdate({ ...updatedChantier, googleEventId: null });
+            } catch (e) { console.error("GCal Delete Fail", e); }
         }
     };
 
@@ -94,13 +134,59 @@ export const EditChantierModal = ({ chantier, onClose, onUpdate }) => {
                             <AddressInput value={f.adresseFinale} onChange={v => setAddr(v, 'adresseFinale')} />
                         </div>
                     )}
+
+                    {/* Gestion du Devis PDF */}
+                    <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-wider">Devis PDF</label>
+
+                        {!deleteExisting && (f.quoteFileId || f.quoteFileName) ? (
+                            <div className="flex items-center justify-between bg-white dark:bg-slate-700 p-2 rounded-lg border border-slate-200 dark:border-slate-600">
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                    <div className="bg-brand-100 dark:bg-brand-900/30 p-1.5 rounded text-brand-600 dark:text-brand-400">
+                                        <FileText size={16} />
+                                    </div>
+                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate max-w-[150px]" title={f.quoteFileName}>
+                                        {f.quoteFileName || "Devis.pdf"}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={() => setDeleteExisting(true)}
+                                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                                    title="Supprimer / Remplacer"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="relative">
+                                <input
+                                    type="file"
+                                    accept=".pdf,application/pdf"
+                                    className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
+                                    onChange={e => setNewFile(e.target.files ? e.target.files[0] : null)}
+                                />
+                                {newFile && <p className="text-xs text-brand-600 mt-1 flex items-center gap-1"><Upload size={12} /> Prêt à envoyer : {newFile.name}</p>}
+                                {deleteExisting && <p className="text-xs text-red-500 mt-1">Le fichier actuel sera supprimé à l'enregistrement.</p>}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="relative">
+                        <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">Infos supplémentaires</label>
+                        <textarea
+                            className="w-full p-3 bg-slate-100 dark:bg-slate-800 border-0 rounded-xl outline-none focus:ring-2 focus:ring-brand-500 transition-all text-sm min-h-[80px]"
+                            placeholder="Codes d'accès, instructions particulières..."
+                            value={f.notes || ''}
+                            onChange={e => setF({ ...f, notes: e.target.value })}
+                        />
+                    </div>
                 </div>
 
                 <div className="flex gap-3 mt-8 pb-4">
                     <Button variant="secondary" onClick={onClose} className="flex-1">Annuler</Button>
                     <Button onClick={sub} className="flex-1">Enregistrer</Button>
                 </div>
-            </Card>
-        </div>
+            </Card >
+        </div >
     );
 };

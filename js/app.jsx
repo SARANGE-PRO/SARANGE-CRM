@@ -9,11 +9,11 @@ import { ref, set, get, child, update, remove, onValue } from "firebase/database
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 
 import { DB, Logger } from "./db.js";
-import { generateUUID, mergeArraysSecure } from "./utils.js";
+import { generateUUID, mergeArraysSecure, sanitizeForFirebase } from "./utils.js";
 import { Button } from "./components/ui/Button.jsx"
 import { Toast } from "./components/ui/Toast.jsx";
 import { AppContext } from "./context.js";
-import { initCalendarClient, deleteGoogleEvent } from "./utils/googleCalendar.js";
+import { initCalendarClient, deleteGoogleEvent, manageGoogleEvent } from "./utils/googleCalendar.js";
 import { ErrorBoundary } from "./components/ErrorBoundary.jsx";
 
 // Vues
@@ -100,14 +100,45 @@ const BootScreen = ({ step, error, onRetry }) => {
 const App = () => {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [st, setSt] = useState({ chantiers: [], products: [], currentChantierId: null });
+
+  // --- SMART RESTORE SESSION INITIALIZATION ---
+  const getInitialSession = () => {
+    try {
+      const saved = localStorage.getItem('sarange_session_v1');
+      if (saved) {
+        const session = JSON.parse(saved);
+        // Règle : < 1h (3600000 ms)
+        if (Date.now() - session.lastActive < 3600000) {
+          if (session.view === 'chantier' && session.activeChantierId) {
+            return { view: 'chantier', currentChantierId: session.activeChantierId };
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Session Restore Fail", e);
+    }
+    return { view: 'dashboard', currentChantierId: null };
+  };
+
+  const initialSession = getInitialSession();
+
+  const [st, setSt] = useState({ chantiers: [], products: [], currentChantierId: initialSession.currentChantierId });
   const [boot, setBoot] = useState({ loading: true, step: 'Init', error: null });
-  const [view, setView] = useState('list');
+  const [view, setView] = useState(initialSession.view);
   const [dark, setDark] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  // NEW: Firebase Real-time connection status
   const [firebaseConnected, setFirebaseConnected] = useState(false);
   const [toast, setToast] = useState(null);
+
+  // --- SESSION PERSISTENCE ---
+  useEffect(() => {
+    const sessionData = {
+      view,
+      activeChantierId: st.currentChantierId,
+      lastActive: Date.now()
+    };
+    localStorage.setItem('sarange_session_v1', JSON.stringify(sessionData));
+  }, [view, st.currentChantierId]);
 
   const showToast = (msg, type = 'success') => setToast({ message: msg, type });
 
@@ -216,9 +247,18 @@ const App = () => {
 
       if (changed) {
         Logger.info("Auto-maintenance (GC) performed");
-        // On sauvegarde le résultat du nettoyage
         await DB.set('sarange_root', finalData);
       }
+
+      if (changed) {
+        Logger.info("Auto-maintenance (GC) performed");
+        await DB.set('sarange_root', finalData);
+      }
+
+      // CRITICAL : Enforce Session Decision (Smart Restore)
+      // Whether it is a restored ID or null (Dashboard forced), we must respect the initialization
+      // and NOT let the stale ID from IndexedDB take over.
+      finalData.currentChantierId = st.currentChantierId;
 
       setSt(finalData);
 
@@ -295,7 +335,10 @@ const App = () => {
         // On ajoute le timestamp global
         updates['sarange_root/lastWriteTime'] = Date.now();
 
-        update(ref(db), updates)
+        // 🚨 IMPORTANT : Nettoyage préventif pour éviter "undefined" (Crash Firebase)
+        const cleanUpdates = sanitizeForFirebase(updates);
+
+        update(ref(db), cleanUpdates)
           .then(() => Logger.info("☁️ Synchro Cloud OK (Granular)"))
           .catch(e => console.error("Firebase Sync Fail", e));
       }
@@ -364,6 +407,12 @@ const App = () => {
       const now = new Date().toISOString();
       const updates = { purged: true, deleted: true, updatedAt: now };
 
+      // 0. Supprimer événement Google si existe
+      const target = st.chantiers.find(c => c.id === id);
+      if (target && target.googleEventId) {
+        deleteGoogleEvent(target).catch(console.error);
+      }
+
       // 1. Mise à jour Optimiste (State Local)
       // On le garde dans le state mais marqué purged, pour que l'UI puisse filtrer.
       // NOTE: L'UI doit filtrer !c.purged
@@ -431,6 +480,46 @@ const App = () => {
     saveProduct: p => setSt(s => { const now = new Date().toISOString(); const ex = s.products.find(x => x.id === p.id); return { ...s, products: ex ? s.products.map(x => x.id === p.id ? { ...p, dateMaj: now, updatedAt: now } : x) : [...s.products, { ...p, updatedAt: now }] } }),
     deleteProduct: id => setSt(s => ({ ...s, products: s.products.map(x => x.id === id ? { ...x, deleted: true, updatedAt: new Date().toISOString() } : x) })),
     duplicateChantier: id => { const c = st.chantiers.find(x => x.id === id); if (!c) return; const nId = generateUUID(), nC = { ...c, id: nId, client: c.client + " (Copie)", date: new Date().toISOString(), updatedAt: new Date().toISOString(), dateFinalisation: null, sendStatus: 'DRAFT', sentAt: null, lastError: null }, cP = st.products.filter(p => p.chantierId === id && !p.deleted).map(p => ({ ...p, id: generateUUID(), chantierId: nId, updatedAt: new Date().toISOString() })); setSt(s => ({ ...s, chantiers: [nC, ...s.chantiers], products: [...s.products, ...cP] })); showToast("Dossier dupliqué"); },
+    // Centralized Date Update + GCal Sync
+    updateChantierDate: async (id, date) => {
+      // 1. Optimistic Update
+      const previousState = { ...st };
+      const target = st.chantiers.find(c => c.id === id);
+      if (!target) return;
+
+      const updatedChantier = { ...target, dateIntervention: date, updatedAt: new Date().toISOString() };
+
+      setSt(s => ({
+        ...s,
+        chantiers: s.chantiers.map(c => c.id === id ? updatedChantier : c)
+      }));
+
+      // 2. Google Calendar Sync (Fire & Forget)
+      try {
+        if (!date && target.googleEventId) {
+          // Cas Annulation : On supprime l'événement
+          deleteGoogleEvent(target).catch(console.error);
+          setSt(s => ({ ...s, chantiers: s.chantiers.map(c => c.id === id ? { ...c, googleEventId: null } : c) }));
+          DB.set('sarange_root', { ...st, chantiers: st.chantiers.map(c => c.id === id ? { ...c, googleEventId: null } : c) }).catch(console.error);
+        } else if (date) {
+          const eventId = await manageGoogleEvent(updatedChantier);
+          if (eventId) {
+            // Si l'ID a changé (création) ou confirmé, on le sauvegarde
+            setSt(s => ({
+              ...s,
+              chantiers: s.chantiers.map(c => c.id === id ? { ...c, googleEventId: eventId } : c)
+            }));
+            // Persist Google ID change immediately
+            DB.set('sarange_root', { ...st, chantiers: st.chantiers.map(c => c.id === id ? { ...c, googleEventId: eventId } : c) }).catch(console.error);
+          }
+        }
+      } catch (e) {
+        console.error("Centralized GCal Sync Fail", e);
+        // Optionnel : Rollback ou Toast erreur
+        showToast("Erreur synchro Google Calendar", "error");
+      }
+    },
+
     importData: (newData) => { setSt(newData); DB.set('sarange_root', newData).catch(e => console.error(e)); },
 
     // NEW: Smart Force Sync (Fetch -> Merge -> Push)
@@ -511,14 +600,14 @@ const App = () => {
                 /* Lazy loading du TrashView qui sera créé juste après */
                 <TrashView onBack={() => setView('list')} state={st} actions={act} /> :
                 !st.currentChantierId ?
-                  <DashboardView 
-                    onNew={() => setView('new')} 
-                    viewMode={view} 
-                    setViewMode={setView} 
-                    isDark={dark} 
-                    toggleDark={() => setDark(!dark)} 
-                    onOpenSettings={() => setView('settings')} 
-                    onOpenTrash={() => setView('trash')} 
+                  <DashboardView
+                    onNew={() => setView('new')}
+                    viewMode={view}
+                    setViewMode={setView}
+                    isDark={dark}
+                    toggleDark={() => setDark(!dark)}
+                    onOpenSettings={() => setView('settings')}
+                    onOpenTrash={() => setView('trash')}
                     isOnline={isOnline}
                     firebaseConnected={firebaseConnected} // Pass diagnostic prop
                   /> :

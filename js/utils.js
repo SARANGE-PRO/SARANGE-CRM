@@ -8,6 +8,27 @@ export const generateUUID = () =>
         });
 
 /**
+ * Nettoie un objet pour Firebase (remplace undefined par null)
+ * Firebase refuse les valeurs undefined et plante la synchro.
+ */
+export const sanitizeForFirebase = (obj) => {
+    if (obj === undefined) return null;
+    if (obj === null || typeof obj !== 'object') return obj;
+
+    if (Array.isArray(obj)) {
+        return obj.map(sanitizeForFirebase);
+    }
+
+    const newObj = {};
+    for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            newObj[key] = sanitizeForFirebase(obj[key]);
+        }
+    }
+    return newObj;
+};
+
+/**
  * Échappe les caractères HTML pour éviter les failles XSS.
  */
 export const escapeHTML = (str) => {

@@ -22,7 +22,7 @@ Ce document est la **source de vérité technique** pour le projet SarangePro. T
 
 ## 1. Arborescence & Rôles
 
-```
+```text
 sarange-app/
 ├── public/                 # Assets statiques (PWA icons, manifest)
 ├── src/
@@ -57,6 +57,11 @@ sarange-app/
 
 Les données sont stockées sous forme d'objets JSON dans **IndexedDB** (local) et **Firebase** (cloud).
 
+> **Nouveauté v2.1 (Stockage Hybride)** :
+>
+> * **Données Métier (JSON)** : Sync bidirectionnelle Firebase/IndexedDB.
+> * **Fichiers Lourds (PDF)** : Stockage **LOCAL UNIQUEMENT** dans IndexedDB (Store `files`). Pas de sync Cloud pour éviter les timeouts et coûts de bande passante.
+
 ### 🏠 `Chantier` (Dossier Client)
 
 | Clé | Type | Obligatoire ? | Description |
@@ -77,9 +82,10 @@ Les données sont stockées sous forme d'objets JSON dans **IndexedDB** (local) 
 | `purged` | `boolean` | ❌ | `true` si supprimé définitivement (attente GC). |
 | `deletedAt` | `number` (ts) | ❌ | Timestamp de la suppression (pour GC). |
 | `history` | `object[]` | ❌ | Traceabilité. `{ date: ISO, action: 'UNLOCK', reason: string, details?: string, user: string }` |
-| `quoteFile` | `Blob` | ❌ | Fichier PDF source (stocké en Blob dans IndexedDB). |
+| `quoteFileId` | `UUID` | ❌ | ID du fichier PDF stocké dans le store local `files`. |
 | `quoteFileName` | `string` | ❌ | Nom du fichier original. |
 | `referenceDevis` | `string` | ❌ | Numéro de devis extrait (ex: "12345"). |
+| `notes` | `string` | ❌ | Infos supplémentaires (Code d'accès, etc.). Synchro GCal. |
 
 ### 🪟 `Product` (Menuiserie)
 
@@ -100,7 +106,7 @@ Les données sont stockées sous forme d'objets JSON dans **IndexedDB** (local) 
 | `vitrageFlags` | `object` | `{ standard: bool, g200: bool, feuillete1f: bool... }` |
 | `oscilloBattant`| `boolean`| Option Fenêtre. |
 | `grilleVentilation`| `boolean`| Option. |
-| `voletRoulant` | `object` | Pour VR: `{ manoeuvre: 'FILAIRE'|'RADIO'|'SOLAIRE', ... }` |
+| `voletRoulant` | `object` | Pour VR: `{ manoeuvre: 'FILAIRE'/'RADIO'/'SOLAIRE', ... }` |
 | `dessin` | `object` | `{ lines: [{x,y}[]], width: 350, height: 250 }` (Vecteurs). |
 | `photos` | `string[]` | **⚠️ ATTENTION** : Actuellement stocké en **Base64** dans IndexedDB (Peut alourdir la sync). *Recommandation future : Stocker sur Firebase Storage et ne garder que l'URL.* |
 | `notes` | `string` | Texte libre. |
@@ -108,6 +114,16 @@ Les données sont stockées sous forme d'objets JSON dans **IndexedDB** (local) 
 | `source` | `enum` | `'MANUAL'`, `'QUOTE'` (Indique si importé). |
 | `isVerified` | `boolean` | `false` par défaut si source `QUOTE`. Requiert validation métreur. |
 | `updatedAt` | `ISO8601` | **Requis** pour la Sync. |
+
+### 📂 `File` (Stockage Local Blobs)
+
+Store IndexedDB séparé : `files` (local-only).
+
+| Clé | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `UUID` | Clé primaire. Correspond au `quoteFileId` du chantier. |
+| `blob` | `Blob` | Le fichier binaire (PDF). |
+| `date` | `ISO8601` | Date d'ajout. |
 
 ---
 
@@ -135,6 +151,20 @@ Les données sont stockées sous forme d'objets JSON dans **IndexedDB** (local) 
 * **Format Standard** : `ISO8601` (String) est le format recommandé pour `date` et `updatedAt`.
 * **Exception Actuelle** : `deletedAt` et `lastWriteTime` utilisent un Timestamp (Number).
 * **Recommandation** : Pour garantir une cohérence parfaite dans les comparaisons de sync, il est conseillé de migrer tous les champs temporels vers `ISO8601` ou Timestamp numérique unique à l'avenir.
+
+### 3.4 Gestion de Session (Smart Restore)
+
+Amélioration UX pour le redémarrage de l'application.
+
+* **Stockage** : `localStorage` (clé `sarange_session_v1`).
+* **Données** : `{ view: string, activeChantierId: string|null, lastActive: number }`.
+* **Règle des 60 minutes** :
+  * Au démarrage, le système vérifie le timestamp `lastActive`.
+  * **SI** Moins d'une heure (`< 3600000ms`) **ET** Vue précédente était `'chantier'`.
+  * **ALORS** Restauration immédiate de la vue Chantier et du Dossier actif.
+  * **SINON** (expiration ou autre vue) : Force le retour au **Dashboard** (`activeChantierId = null`).
+* **Persistance** : Mise à jour du timestamp à chaque changement de vue ou de dossier.
+* **Avantage** : Permet de reprendre un travail en cours après un refresh, mais évite de rester bloqué sur un vieux dossier après une longue pause.
 
 ---
 
@@ -169,16 +199,51 @@ C'est le garant de l'intégrité des données.
 * **Auto-Archive** : Au démarrage (`runBoot`), le système scanne les chantiers **SENT (Envoyés)** datant de plus de **60 jours** (`sentAt` ou `updatedAt`) et les marque automatiquement `archived: true` pour alléger la vue principale. Les brouillons ne sont jamais archivés automatiquement.
 * **Garbage Collector (GC)** : Si un item est marqué `purged: true` (Corbeille vidée) ET que son `updatedAt` est vieux de plus de **30 jours**, il est **physiquement détruit** de la DB Cloud & Locale.
 
-### 🔑 Gestion des Tokens (Google API)
+### 🔑 4.4 Synchronisation Google Calendar (Centralisée)
 
-L'application utilise une stratégie **Lazy Auth** pour les services Google (Calendar, Sheets) :
+> **Nouveauté v2.2** : La logique de synchronisation est désormais **centralisée** et **silencieuse**.
 
-1. **Stockage Volatile** : Le token d'accès (`access_token`) est stocké uniquement en mémoire via `gapi.client.setToken()`. Il n'est **jamais** persisté dans localStorage pour des raisons de sécurité.
-2. **Renouvellement à la demande** :
-    * Avant chaque appel API, on vérifie `gapi.client.getToken()`.
-    * Si absent ou expiré (Erreur 401), on déclenche `requestAccessToken()` (GIS).
-    * Le nouveau token est immédiatement réinjecté dans `gapi` pour les appels suivants.
-3. **Expérience Utilisateur** : La pop-up de consentement ne s'affiche que lors de la première action de la session (ou après expiration ~1h). Les actions suivantes sont transparentes.
+#### A. Architecture "Fire & Forget" (Non-Bloquante)
+
+Pour garantir une fluidité totale de l'UI, la synchronisation Google Calendar ne bloque jamais l'utilisateur.
+
+1. **Mise à jour Optimiste** : L'interface (React State) est mise à jour immédiatement (`setSt`).
+2. **Persistance Locale** : La donnée est sauvegardée dans IndexedDB (`DB.set`).
+3. **Appel Async** : La fonction `manageGoogleEvent` est lancée en arrière-plan.
+    * *Succès* : Le `googleEventId` est mis à jour silencieusement dans le State + DB.
+    * *Echec* : L'état reste inchangé, l'indicateur visuel signale le problème.
+
+#### B. Point d'Entrée Unique : `updateChantierDate`
+
+Toute modification de date (Planning, Modale, Drag&Drop) **DOIT** passer par la fonction centrale `updateChantierDate(id, date)` présente dans `App.jsx`.
+
+**Responsabilités de cette fonction :**
+
+1. **Update Local** : Modifie `dateIntervention` et `updatedAt`.
+2. **Routing GCal** :
+    * **Si Date présente** : Appelle `manageGoogleEvent` (Création ou Mise à jour).
+    * **Si Date nulle (Annulation)** : Appelle `deleteGoogleEvent` (Suppression de l'événement).
+
+#### C. Gestion des Suppressions (Cleanup)
+
+L'intégrité du calendrier est garantie par des hooks de suppression :
+
+* **Soft Delete** (Corbeille) : L'événement Google est supprimé.
+* **Hard Delete** (Purge) : L'événement Google est supprimé (sécurité supplémentaire).
+* **Annulation RDV** : L'événement Google est supprimé.
+
+#### D. Indicateurs Visuels (Feedback)
+
+L'utilisateur est informé de l'état de la synchronisation via des indicateurs discrets :
+
+* 🟢 **Icône GCal Verte** : Synchronisé (Le `googleEventId` est présent et confirmé).
+* 🟠 **Badge Orange / Alert** : Non Synchronisé (Date présente mais pas d'`googleEventId`).
+  * *Action* : Un clic sur l'alerte lance une **Force Sync**.
+
+#### E. Gestion des Tokens (Lazy Auth)
+
+1. **Stockage Volatile** : Token en mémoire uniquement (`gapi.client.setToken`).
+2. **Renouvellement** : Automatique ou via popup si expiré, transparent pour la plupart des actions.
 
 ---
 
@@ -253,17 +318,18 @@ Moteur d'extraction chirurgical dédié aux devis Sarange/Artertia.
 4. **Integration** : Ajout au chantier avec notes de traçabilité.
 5. **Traceability Meta** : Extraction du numéro de devis (`referenceDevis`) et stockage du Blob source (`quoteFile`).
 
-### 📂 Visionneuse PDF Mobile-Safe (ObjectURLs)
+### 📂 Visionneuse PDF & Stockage Hybride
 
-Pour garantir la performance sur mobile (iOS) et éviter les erreurs de mémoire :
+Pour garantir la performance mobile et la persistance sans alourdir la sync Firebase :
 
-* **Stockage** : Les fichiers PDF sont stockés sous forme de **Blob** natif dans IndexedDB (pas de Base64). Accompagné de `quoteFileName`.
-* **Indépendance** : Le fichier PDF est lié au **Chantier** (`chantier.quoteFile`) et NON aux produits. La suppression des produits importés n'affecte pas l'accès au fichier PDF source.
-* **Affichage** : Utilisation de `URL.createObjectURL(blob)` uniquement au moment de l'ouverture de la modale.
-* **Fallbacks & Sécurité** :
-  * Bouton "Ouvrir dans un nouvel onglet" impératif pour iOS.
-  * Bouton "Supprimer le Devis" (Corbeille) : Retire le lien source (`quoteFile`, `referenceDevis`) du chantier mais conserve les produits importés (devenant orphelins de source).
-* **Nettoyage** : Appel systématique à `URL.revokeObjectURL(url)` à la fermeture de la visionneuse pour libérer la RAM.
+* **Stockage** : Les fichiers PDF sont stockés dans un objectStore dédié `files` de IndexedDB via `DB.storeFile(id, blob)`.
+* **Référencement** : Le `Chantier` ne contient que l'ID (`quoteFileId`) et le nom (`quoteFileName`). Le blob lourd n'est jamais envoyé à Firebase.
+* **Conséquence** : Les PDF sont accessibles **uniquement sur l'appareil** où ils ont été importés.
+* **Affichage** : Récupération via `DB.getFile(id)` -> `URL.createObjectURL(blob)`.
+* **Modes d'Import** :
+  1. **Parse & Import** : Extrait les produits et stocke le fichier.
+  2. **Store Only** : Stocke uniquement le fichier pour consultation (pas de création de produits).
+* **Nettoyage** : La suppression du devis entraîne la suppression physique du Blob dans IndexedDB (`DB.deleteFile`).
 
 ---
 

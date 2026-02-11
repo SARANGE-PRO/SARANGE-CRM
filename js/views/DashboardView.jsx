@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sun, Moon, Settings, Search, Plus, MapPin, Phone, Mail, UserCheck, CheckCircle, AlertCircle, Clock, Copy, Trash2, Archive, Menu, LogOut, Cloud, CloudOff, Calendar, ArrowRight } from 'lucide-react';
-import { manageGoogleEvent } from "../utils/googleCalendar.js";
+import { Sun, Moon, Settings, Search, Plus, MapPin, Phone, Mail, UserCheck, CheckCircle, AlertCircle, AlertTriangle, Clock, Copy, Trash2, Archive, Menu, LogOut, Cloud, CloudOff, Calendar, ArrowRight } from 'lucide-react';
 import { Button } from "../components/ui/Button.jsx";
+import { checkUrgency } from "../utils/calendar.js";
 import { Input } from "../components/ui/Input.jsx";
 import { SelectToggle } from "../components/ui/SelectToggle.jsx";
 import { Card } from "../components/ui/Card.jsx";
@@ -10,8 +10,9 @@ import { AddressInput } from "../components/ui/AddressInput.jsx";
 import { SmartAddress } from "../components/ui/SmartAddress.jsx";
 import { useApp } from "../context.js";
 import AddToCalendarBtn from "../components/AddToCalendarBtn.jsx";
-import { checkUrgency, downloadICS } from "../utils/calendar.js";
 import { PlanningModal } from "../components/PlanningModal.jsx";
+import { DB } from "../db.js";
+import { generateUUID } from "../utils.js";
 
 // --- COMPONENTS ---
 
@@ -54,7 +55,7 @@ const MobileNavTiles = ({ activeTab, onTabChange, counts }) => {
 };
 
 export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpenTrash, isOnline, firebaseConnected }) => {
-    const { state, selectChantier, deleteChantier, duplicateChantier, updateChantier, addChantier } = useApp();
+    const { state, selectChantier, deleteChantier, duplicateChantier, updateChantier, addChantier, updateChantierDate } = useApp();
     const [s, setS] = useState('');
     const [m, setM] = useState(false); // New Modal
     const [menuOpen, setMenuOpen] = useState(false);
@@ -65,27 +66,11 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
     const [planningId, setPlanningId] = useState(null);
     const handlePlanifier = async (date) => {
         if (planningId) {
-            // 1. Mise à jour locale immédiate
-            updateChantier(planningId, { dateIntervention: date });
-
-            const chant = state.chantiers.find(c => c.id === planningId);
-            if (chant) {
-                // 2. Synchro Google Calendar (Background)
-                try {
-                    /* On garde l'ICS pour l'instant si l'utilisateur y tient, 
-                       mais on ajoute surtout la synchro API */
-                    // downloadICS({ ...chant, dateIntervention: date }); 
-
-                    const updatedChantier = { ...chant, dateIntervention: date };
-                    const eventId = await manageGoogleEvent(updatedChantier);
-                    if (eventId) {
-                        updateChantier(planningId, { googleEventId: eventId });
-                    }
-                } catch (e) {
-                    console.error("Auto-sync GCal blocked", e);
-                }
-            }
+            // 1. Fermeture Modale IMMÉDIATE
             setPlanningId(null);
+
+            // 2. Mise à jour centralisée (Locale + Google)
+            if (date) updateChantierDate(planningId, date);
         }
     };
 
@@ -185,11 +170,33 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
                             </span>
                         </div>
                     )}
-                    {c.telephone && (
-                        <a href={`tel:${c.telephone}`} onClick={e => e.stopPropagation()} className="bg-white dark:bg-slate-700 p-2 rounded-full text-slate-600 dark:text-slate-300 shadow-sm border border-slate-100 dark:border-slate-600 hover:text-brand-600 hover:border-brand-600 transition-colors">
-                            <Phone size={16} />
-                        </a>
-                    )}
+                    <div className="flex items-center gap-1 ml-auto">
+                        {/* GCal Status Indicator */}
+                        {c.dateIntervention && (
+                            <div title={c.googleEventId ? "Synchronisé Google Calendar" : "Non synchronisé Google Calendar"} className="ml-1">
+                                {c.googleEventId ? (
+                                    <img src="https://www.gstatic.com/images/branding/product/1x/calendar_2020q4_48dp.png" alt="GCal OK" className="w-4 h-4 opacity-80" />
+                                ) : (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            // Force Sync via Centralized Function
+                                            updateChantierDate(c.id, c.dateIntervention);
+                                        }}
+                                        className="text-orange-400 hover:text-orange-600 animate-pulse"
+                                        title="Cliquez pour forcer la synchro Google"
+                                    >
+                                        <AlertTriangle size={14} />
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                        {c.telephone && (
+                            <a href={`tel:${c.telephone}`} onClick={e => e.stopPropagation()} className="bg-white dark:bg-slate-700 p-2 rounded-full text-slate-600 dark:text-slate-300 shadow-sm border border-slate-100 dark:border-slate-600 hover:text-brand-600 hover:border-brand-600 transition-colors">
+                                <Phone size={16} />
+                            </a>
+                        )}
+                    </div>
                 </div>
 
                 {/* Actions Specific for TODO */}
@@ -382,8 +389,13 @@ export const NewChantierModal = ({ onClose }) => {
         telephone: '',
         email: '',
         clientFinal: '',
-        adresseFinale: ''
+        telephone: '',
+        email: '',
+        clientFinal: '',
+        adresseFinale: '',
+        notes: ''
     });
+    const [file, setFile] = useState(null);
 
     const setAddr = (v, field = 'adresse') => {
         if (typeof v === 'object') setF({ ...f, [field]: v.address, gps: v.gps });
@@ -395,7 +407,18 @@ export const NewChantierModal = ({ onClose }) => {
         if (f.typeContrat === 'SOUS_TRAITANCE' && (!f.clientFinal || !f.adresseFinale)) return alert('Client final requis');
 
         // 1. Création Locale (Immédiate)
-        const newChantier = { ...f, date: new Date().toISOString() };
+        let quoteFileId = null;
+        if (file) {
+            quoteFileId = generateUUID();
+            await DB.storeFile(quoteFileId, file);
+        }
+
+        const newChantier = {
+            ...f,
+            date: new Date().toISOString(),
+            quoteFileId,
+            quoteFileName: file ? file.name : null
+        };
         addChantier(newChantier);
         onClose();
 
@@ -449,6 +472,27 @@ export const NewChantierModal = ({ onClose }) => {
                             <AddressInput value={f.adresseFinale} onChange={v => setAddr(v, 'adresseFinale')} />
                         </div>
                     )}
+
+                    <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-wider">Devis PDF (Optionnel)</label>
+                        <input
+                            type="file"
+                            accept=".pdf,application/pdf"
+                            className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
+                            onChange={e => setFile(e.target.files ? e.target.files[0] : null)}
+                        />
+                        {file && <p className="text-xs text-brand-600 mt-1">Fichier sélectionné : {file.name}</p>}
+                    </div>
+
+                    <div className="relative">
+                        <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">Infos supplémentaires</label>
+                        <textarea
+                            className="w-full p-3 bg-slate-100 dark:bg-slate-800 border-0 rounded-xl outline-none focus:ring-2 focus:ring-brand-500 transition-all text-sm min-h-[80px]"
+                            placeholder="Codes d'accès, instructions particulières..."
+                            value={f.notes}
+                            onChange={e => setF({ ...f, notes: e.target.value })}
+                        />
+                    </div>
                 </div>
 
                 <div className="flex gap-3 mt-8 pb-4">

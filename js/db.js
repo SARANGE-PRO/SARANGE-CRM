@@ -26,7 +26,8 @@ export const DB = {
         return new Promise((resolve, reject) => {
             const t = setTimeout(() => reject(new Error("Timeout connexion DB")), 3000);
             try {
-                const r = indexedDB.open(DB_NAME, DB_VERSION);
+                // Upgrade DB Version 1 -> 2 for 'files' store
+                const r = indexedDB.open(DB_NAME, 2);
 
                 r.onerror = (e) => { clearTimeout(t); reject(e.target.error); };
                 r.onsuccess = (e) => {
@@ -39,6 +40,12 @@ export const DB = {
                     Logger.info("Migration DB...");
                     const d = e.target.result;
                     if (!d.objectStoreNames.contains("data")) d.createObjectStore("data", { keyPath: "key" });
+
+                    // V2: Add 'files' store for PDF Blob storage
+                    if (!d.objectStoreNames.contains("files")) {
+                        Logger.info("Creating 'files' store...");
+                        d.createObjectStore("files", { keyPath: "id" });
+                    }
                 };
                 r.onblocked = () => Logger.warn("DB bloquée (autre onglet ?)");
             } catch (e) { clearTimeout(t); reject(e); }
@@ -66,6 +73,37 @@ export const DB = {
                     }
                     j(tx.error);
                 };
+            } catch (e) { j(e); }
+        });
+    },
+    // --- FILES API (V2) ---
+    async storeFile(id, blob) {
+        if (!this.db) await this.init();
+        return new Promise((r, j) => {
+            try {
+                const tx = this.db.transaction("files", "readwrite").objectStore("files").put({ id, blob, date: new Date().toISOString() });
+                tx.onsuccess = () => r();
+                tx.onerror = () => j(tx.error);
+            } catch (e) { j(e); }
+        });
+    },
+    async getFile(id) {
+        if (!this.db) await this.init();
+        return new Promise((r, j) => {
+            try {
+                const tx = this.db.transaction("files", "readonly").objectStore("files").get(id);
+                tx.onsuccess = () => r(tx.result ? tx.result.blob : null);
+                tx.onerror = () => j(tx.error);
+            } catch (e) { j(e); }
+        });
+    },
+    async deleteFile(id) {
+        if (!this.db) await this.init();
+        return new Promise((r, j) => {
+            try {
+                const tx = this.db.transaction("files", "readwrite").objectStore("files").delete(id);
+                tx.onsuccess = () => r();
+                tx.onerror = () => j(tx.error);
             } catch (e) { j(e); }
         });
     }

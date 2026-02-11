@@ -1,0 +1,1 @@
+import{R as o}from"./vendor-zB6w3uSG.js";import{c as d}from"./index-DoWnPC-X.js";const l=({children:e,className:r="",onClick:a})=>o.createElement("div",{onClick:a,className:d("bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden",r)},e);export{l as C};

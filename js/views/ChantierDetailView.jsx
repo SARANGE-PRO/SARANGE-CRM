@@ -10,7 +10,6 @@ import { Spinner } from "../components/ui/Spinner.jsx";
 import { SmartAddress } from "../components/ui/SmartAddress.jsx";
 import { StepsHeader } from "../components/StepsHeader.jsx";
 import { useApp } from "../context.js";
-import { manageGoogleEvent, deleteGoogleEvent } from "../utils/googleCalendar.js";
 import { ProductEditor } from "../components/ProductEditor.jsx";
 import { EditChantierModal } from "../components/EditChantierModal.jsx";
 import { QuoteImportModal } from "./QuoteImportModal.jsx";
@@ -43,7 +42,7 @@ const mapQuoteTypeToAppType = (quoteType, subtype) => {
     }
 };
 import { generateReportHTML } from "../reports.js";
-import { Logger } from "../db.js";
+import { Logger, DB } from "../db.js";
 
 const HistorySection = ({ history }) => {
     if (!history?.length) return null;
@@ -395,7 +394,7 @@ const UnlockModal = ({ onClose, onUnlock }) => {
 
 
 export const ChantierDetailView = () => {
-    const { state, selectChantier, deleteProduct, saveProduct, updateChantier } = useApp();
+    const { state, selectChantier, deleteProduct, saveProduct, updateChantier, updateChantierDate } = useApp();
     const [edt, setEdt] = useState(null);
     const [showConfirm, setShowConfirm] = useState(false);
     const [showUnlock, setShowUnlock] = useState(false);
@@ -404,6 +403,7 @@ export const ChantierDetailView = () => {
     const [ied, setIed] = useState(false);
     const [toast, setToast] = useState(null);
     const [showUnverifiedWarning, setShowUnverifiedWarning] = useState(false);
+    const [pdfBlob, setPdfBlob] = useState(null);
 
     const ch = state.chantiers.find(c => c.id === state.currentChantierId);
     if (ch && ch.deleted) return null; // Sécurité si le chantier courant vient d'être supprimé (synchro)
@@ -454,6 +454,17 @@ export const ChantierDetailView = () => {
         }
     }, [showUnverifiedWarning]);
 
+    // Load PDF from DB if exists
+    React.useEffect(() => {
+        if (ch?.quoteFileId) {
+            DB.getFile(ch.quoteFileId).then(blob => {
+                if (blob) setPdfBlob(blob);
+            }).catch(console.error);
+        } else {
+            setPdfBlob(null);
+        }
+    }, [ch?.quoteFileId]);
+
     const handleUnlock = ({ reason, details, user }) => {
         const logEntry = {
             date: new Date().toISOString(),
@@ -475,14 +486,21 @@ export const ChantierDetailView = () => {
         setToast({ message: 'Dossier déverrouillé (Action enregistrée)', type: 'info' });
     };
 
-    const handleRemoveQuote = () => {
+    const handleRemoveQuote = async () => {
         if (!confirm("Voulez-vous supprimer le devis lié à ce chantier ? Les produits importés seront conservés mais ne seront plus liés au fichier source.")) return;
+
+        if (ch.quoteFileId) {
+            await DB.deleteFile(ch.quoteFileId);
+        }
+
         updateChantier(ch.id, {
-            quoteFile: null,
+            quoteFileId: null, // New field
+            quoteFile: null,   // Legacy cleanup
             quoteFileName: null,
             referenceDevis: null,
             updatedAt: new Date().toISOString()
         });
+        setPdfBlob(null);
         setToast({ message: "Lien avec le devis supprimé", type: "info" });
     };
 
@@ -490,13 +508,26 @@ export const ChantierDetailView = () => {
      * Gère l'importation des items du devis.
      * Mappe les QuoteItems vers le format Product de la BDD.
      */
-    const handleImport = (quoteItems, file, meta) => {
-        if (!quoteItems || quoteItems.length === 0) return;
+    /**
+     * Gère l'importation des items du devis.
+     * Mappe les QuoteItems vers le format Product de la BDD.
+     */
+    const handleImport = async (quoteItems, file, meta) => {
+        // Support "Store Only" mode where quoteItems is empty but file is present
+        if ((!quoteItems || quoteItems.length === 0) && !file) return;
 
         const timestamp = new Date().toISOString();
         const startIdx = prds.length + 1;
 
-        const newProducts = quoteItems.map((item, idx) => {
+        // 1. Store File locally
+        let fileId = null;
+        if (file) {
+            fileId = generateUUID();
+            await DB.storeFile(fileId, file);
+        }
+
+        // 2. Process Items (if any)
+        const newProducts = (quoteItems || []).map((item, idx) => {
             // Utilisation du Mapping Centralisé V5
             const mapping = mapQuoteTypeToAppType(item.type, item.subtype);
 
@@ -538,18 +569,27 @@ export const ChantierDetailView = () => {
             };
         });
 
-        // Mise à jour du chantier avec le fichier blob et la réf
+        // Mise à jour du chantier avec le fichier ID et la réf
+        // IMPORTANT: On ne stocke PLUS le blob 'quoteFile' dans l'objet chantier pour éviter les pb de synchro
         const updatedChantier = {
             ...ch,
-            quoteFile: file || ch.quoteFile,
+            quoteFileId: fileId || ch.quoteFileId,
             quoteFileName: file?.name || ch.quoteFileName,
             referenceDevis: meta?.number || ch.referenceDevis,
             updatedAt: timestamp
         };
+        // Cleanup legacy blob if exists
+        delete updatedChantier.quoteFile;
+
         updateChantier(ch.id, updatedChantier);
 
         // Batch Update / Save
         newProducts.forEach(p => saveProduct(p));
+
+        if (fileId) {
+            // Update local view immediately
+            setPdfBlob(file);
+        }
 
         setShowImport(false);
         setToast({ message: `${newProducts.length} menuiseries importées avec succès !`, type: 'success' });
@@ -620,7 +660,8 @@ export const ChantierDetailView = () => {
                         </div>
                     </div>
                     {/* Le bouton est conditionné par le fichier du chantier, indépendamment des produits */}
-                    {ch.quoteFile && (
+                    {/* Le bouton est conditionné par le fichier du chantier, indépendamment des produits */}
+                    {(ch.quoteFileId || pdfBlob || ch.quoteFile) && (
                         <div className="flex items-center gap-1">
                             <Button
                                 variant="ghost"
@@ -628,8 +669,13 @@ export const ChantierDetailView = () => {
                                 className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-200"
                                 icon={FileText}
                                 onClick={() => {
-                                    const url = URL.createObjectURL(ch.quoteFile);
-                                    setPdfUrl(url);
+                                    const blobToUse = pdfBlob || ch.quoteFile;
+                                    if (blobToUse) {
+                                        const url = URL.createObjectURL(blobToUse);
+                                        setPdfUrl(url);
+                                    } else {
+                                        setToast({ message: "Fichier non disponible localement", type: "warning" });
+                                    }
                                 }}
                             >
                                 <span className="hidden sm:inline">Voir le Devis</span>
@@ -679,16 +725,11 @@ export const ChantierDetailView = () => {
                                     <Button
                                         variant="primary"
                                         className="font-bold uppercase w-full sm:w-auto"
-                                        onClick={async () => {
+                                        onClick={() => {
                                             const input = document.getElementById(`date-picker-${ch.id}`);
                                             const val = input?.value;
                                             if (!val) return alert("Veuillez sélectionner une date !");
-                                            updateChantier(ch.id, { dateIntervention: val });
-                                            try {
-                                                const updatedChantier = { ...ch, dateIntervention: val };
-                                                const eventId = await manageGoogleEvent(updatedChantier);
-                                                if (eventId) updateChantier(ch.id, { googleEventId: eventId });
-                                            } catch (e) { console.error(e); }
+                                            updateChantierDate(ch.id, val);
                                         }}
                                     >
                                         Valider
@@ -707,24 +748,36 @@ export const ChantierDetailView = () => {
                             </div>
                             <div>
                                 <p className="text-xs font-bold text-green-800 dark:text-green-200 uppercase tracking-wide">Intervention planifiée</p>
-                                <p className="text-lg font-bold text-slate-800 dark:text-white">
+                                <p className="text-lg font-bold text-slate-800 dark:text-white flex flex-col sm:flex-row sm:items-center gap-2">
                                     {new Date(ch.dateIntervention).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
+
+                                    {ch.googleEventId ? (
+                                        <span className="bg-white/80 dark:bg-green-800/50 px-2 py-0.5 rounded-full text-xs flex items-center gap-1 border border-green-200 dark:border-green-700 w-fit">
+                                            <img src="https://www.gstatic.com/images/branding/product/1x/calendar_2020q4_48dp.png" alt="GCal" className="w-3 h-3" />
+                                            Synchronisé
+                                        </span>
+                                    ) : (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                updateChantierDate(ch.id, ch.dateIntervention);
+                                            }}
+                                            className="bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded-full text-xs flex items-center gap-1 animate-pulse border border-orange-200 dark:border-orange-800 hover:bg-orange-200 transition-colors w-fit"
+                                        >
+                                            <AlertTriangle size={12} />
+                                            Non Synchronisé (Forcer)
+                                        </button>
+                                    )}
                                 </p>
                             </div>
                         </div>
                         <Button
                             variant="danger"
                             icon={CalendarX}
-                            onClick={async () => {
+                            onClick={() => {
                                 if (confirm("Confirmer l'annulation du rendez-vous ? Le dossier repassera en 'À Planifier'.")) {
-                                    updateChantier(ch.id, { dateIntervention: null, updatedAt: new Date().toISOString() });
-                                    try {
-                                        await deleteGoogleEvent(ch);
-                                        setToast({ message: "Rendez-vous annulé", type: "info" });
-                                    } catch (e) {
-                                        console.error(e);
-                                        setToast({ message: "Erreur suppression Google Calendar", type: "warning" });
-                                    }
+                                    updateChantierDate(ch.id, null);
+                                    setToast({ message: "Rendez-vous annulé", type: "info" });
                                 }
                             }}
                         >
