@@ -459,7 +459,7 @@ const blob = await response.blob();
 **Exports Principaux** :
 
 | Fonction | Description |
-|----------|-------------|
+| :--- | :--- |
 | `getOrCreateFolder(name, parentId)` | Gestion hiérarchique des dossiers |
 | `uploadFile(blob, filename, mimeType, folderId)` | Upload multipart basique |
 | `uploadQuoteToDrive(chantier, blob, filename)` | Upload intelligent avec structure auto |

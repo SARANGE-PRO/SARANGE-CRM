@@ -245,13 +245,13 @@ const DrawingCanvas = ({ data, onChange, disabled = false }) => {
                     />
 
                     {/* Controls Overlay */}
-                    <div className="absolute top-4 left-4 flex gap-2 bg-slate-800/90 backdrop-blur p-2 rounded-lg border border-slate-700 shadow-xl">
+                    <div className="absolute top-[calc(16px+env(safe-area-inset-top))] left-4 flex gap-2 bg-slate-800/90 backdrop-blur p-2 rounded-lg border border-slate-700 shadow-xl">
                         <button onClick={() => setTool('free')} className={`p-3 rounded-md ${tool === 'free' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:bg-slate-700'}`}><PenTool size={24} /></button>
                         <button onClick={() => setTool('line')} className={`p-3 rounded-md ${tool === 'line' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:bg-slate-700'}`}><Minus size={24} /></button>
                         <button onClick={() => setTool('rect')} className={`p-3 rounded-md ${tool === 'rect' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:bg-slate-700'}`}><Square size={24} /></button>
                     </div>
 
-                    <div className="absolute top-4 right-4">
+                    <div className="absolute top-[calc(16px+env(safe-area-inset-top))] right-4">
                         <button onClick={() => setIsFS(false)} className="p-3 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-500"><X size={24} /></button>
                     </div>
 
