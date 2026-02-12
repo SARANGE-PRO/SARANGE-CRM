@@ -331,7 +331,11 @@ Tous les nouveaux écrans DOIVENT utiliser ces composants pour garantir l'unifor
 * **Safe Areas** : Utiliser la classe `.safe-pb` pour éviter que le contenu ne soit caché par la barre de geste iOS.
 * **Touch Targets** : Tous les éléments cliquables doivent faire au moins `44px` de hauteur.
 * **Inputs** : Utiliser `inputMode="decimal"` pour les dimensions pour ouvrir le pavé numérique direct.
-* **Full Screen Layouts (Mobile)** : Privilégier la stratégie `fixed inset-0` avec `overflow-hidden` pour le conteneur racine, et `min-h-0` pour les flex-items enfants scrollables. Cela garantit un comportement natif "App-Like" robuste.
+* **Full Screen Layouts (Mobile)** : Privilégier la stratégie `fixed inset-0` avec `overflow-hidden`.
+* **Z-Index Layering** :
+  * `z-30` : Headers Sticky.
+  * `z-40` : Floated Elements (ex: Boutons d'action).
+  * `z-50` : Navigation Apps & Modales Fullscreen.
 
 ---
 

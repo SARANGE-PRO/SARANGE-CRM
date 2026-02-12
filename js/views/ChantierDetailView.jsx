@@ -756,7 +756,7 @@ export const ChantierDetailView = () => {
     return (
         <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950">
             {/* ... Header remains همان ... */}
-            <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10 shadow-sm h-[calc(64px+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex flex-col justify-center overflow-hidden">
+            <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 shadow-sm min-h-[64px] pt-[max(env(safe-area-inset-top),20px)] pb-2 flex flex-col justify-center overflow-hidden">
                 <div className="px-4 flex items-center justify-between w-full">
                     <div className="flex items-center flex-1 min-w-0">
                         <button onClick={() => {
@@ -767,12 +767,12 @@ export const ChantierDetailView = () => {
                                 selectChantier(null);
                             }
                         }} className="mr-3 p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-200"><ArrowLeft size={24} /></button>
-                        <div className="truncate flex-1 cursor-pointer" onClick={() => !isLocked && setIed(true)}>
+                        <div className="truncate flex-1 cursor-pointer py-1" onClick={() => !isLocked && setIed(true)}>
                             <div className="flex items-center gap-2">
-                                <h2 className="font-bold text-lg dark:text-white truncate">{ch.client}</h2>
+                                <h2 className="font-bold text-lg dark:text-white truncate leading-tight">{ch.client}</h2>
                                 {isLocked ? <Lock size={16} className="text-green-600" /> : <Edit size={16} className="text-slate-400" />}
                             </div>
-                            <div className="text-xs text-slate-500 flex flex-col gap-1 mt-1">
+                            <div className="text-xs text-slate-500 flex flex-col gap-1 mt-0.5">
                                 <SmartAddress address={ch.adresse} gps={ch.gps} className="text-slate-500 hover:text-brand-600" />
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{tot} Produit(s)</span>
@@ -989,7 +989,7 @@ export const ChantierDetailView = () => {
 
             {/* Sticky Footer - Action Button */}
             {!isLocked && (
-                <div className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-4 safe-pb z-40 shadow-2xl">
+                <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-4 safe-pb z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
                     {showUnverifiedWarning && hasUnverified && (
                         <div className="mb-4 flex flex-col items-center animate-bounce-short">
                             <div className="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 px-4 py-1.5 rounded-full flex items-center gap-2 border border-amber-200 dark:border-amber-800 shadow-sm transition-all">
