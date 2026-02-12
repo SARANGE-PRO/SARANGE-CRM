@@ -336,7 +336,7 @@ export const NewChantierModal = ({ onClose }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-0 md:p-4 animate-fade-in">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-end md:items-center justify-center p-0 md:p-4 animate-fade-in">
             <Card className="w-full max-w-md p-6 shadow-2xl rounded-t-2xl md:rounded-2xl max-h-[95vh] overflow-y-auto animate-slide-up md:animate-fade-in">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-bold dark:text-white">Nouveau Dossier</h2>

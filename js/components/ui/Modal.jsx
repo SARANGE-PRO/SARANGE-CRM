@@ -13,7 +13,7 @@ export const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
 
     return React.createElement(
         'div',
-        { className: 'fixed inset-0 z-50 flex items-end md:items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in' },
+        { className: 'fixed inset-0 z-[60] flex items-end md:items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in' },
         React.createElement(
             'div',
             {
