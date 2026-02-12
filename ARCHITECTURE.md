@@ -251,6 +251,8 @@ Toute modification de date (Planning, Modale, Drag&Drop) **DOIT** passer par la 
     * **Si Date présente** : Appelle `manageGoogleEvent` (Création ou Mise à jour).
     * **Si Date nulle (Annulation)** : Appelle `deleteGoogleEvent` (Suppression de l'événement).
 
+**Note** : La création avec date immédiate (via `NewChantierModal`) suit le même principe : création locale puis appel async à `manageGoogleEvent` et mise à jour différée du `googleEventId`.
+
 #### C. Gestion des Suppressions (Cleanup)
 
 L'intégrité du calendrier est garantie par des hooks de suppression :

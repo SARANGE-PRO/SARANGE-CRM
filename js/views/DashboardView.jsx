@@ -268,7 +268,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
 
 // Re-integrate Modals with new features
 export const NewChantierModal = ({ onClose }) => {
-    const { addChantier } = useApp();
+    const { addChantier, updateChantier } = useApp();
     const [f, setF] = useState({
         client: '',
         adresse: '',
@@ -278,7 +278,8 @@ export const NewChantierModal = ({ onClose }) => {
         email: '',
         clientFinal: '',
         adresseFinale: '',
-        notes: ''
+        notes: '',
+        dateIntervention: '' // New Field
     });
     const [file, setFile] = useState(null);
 
@@ -304,30 +305,30 @@ export const NewChantierModal = ({ onClose }) => {
             quoteFileId,
             quoteFileName: file ? file.name : null
         };
+
+        // Retrieve created object with generated ID
         const createdChantier = addChantier(newChantier);
         onClose();
 
         // 2. Auto-upload to Drive (background)
         if (file && quoteFileId) {
             const { uploadQuoteToDrive } = await import("../services/googleDrive.js");
-            uploadQuoteToDrive(createdChantier || newChantier, file, file.name)
+            uploadQuoteToDrive(createdChantier, file, file.name)
                 .then(result => {
                     console.log(`✅ Quote auto-uploaded to Drive: ${result.filename}`);
                 })
                 .catch(error => {
                     console.error("Drive auto-upload failed:", error);
-                    // Silent fail - local storage is primary
                 });
         }
 
         // 3. Synchro Google Calendar (Arrière-plan silencieux)
-        // Note : NewChantierModal n'a pas de champ dateIntervention actuellement.
-        // On ne tente la synchro que si une date est définie (futur support)
-        if (newChantier.dateIntervention) {
+        if (createdChantier.dateIntervention) {
             try {
-                const eventId = await manageGoogleEvent(newChantier);
+                const eventId = await manageGoogleEvent(createdChantier);
                 if (eventId) {
-                    // Possibilité de MAJ state si besoin
+                    // Update created chantier with Google ID
+                    updateChantier(createdChantier.id, { googleEventId: eventId });
                 }
             } catch (e) {
                 console.error("Silent GCal Sync Fail", e);
@@ -380,6 +381,21 @@ export const NewChantierModal = ({ onClose }) => {
                             onChange={e => setFile(e.target.files ? e.target.files[0] : null)}
                         />
                         {file && <p className="text-xs text-brand-600 mt-1">Fichier sélectionné : {file.name}</p>}
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-wider">Planification (Optionnel)</label>
+                        <Input
+                            label="Date d'intervention"
+                            type="datetime-local"
+                            value={f.dateIntervention || ''}
+                            onChange={v => setF({ ...f, dateIntervention: v })}
+                        />
+                        <p className="text-[10px] font-medium text-slate-400 mt-2">
+                            {f.dateIntervention
+                                ? "✅ Ce dossier passera directement en PLANNING"
+                                : "ℹ️ Sans date, le dossier sera À PLANIFIER"}
+                        </p>
                     </div>
 
                     <div className="relative">

@@ -381,8 +381,10 @@ const App = () => {
 
   const act = React.useMemo(() => ({
     addChantier: c => {
-      setSt(s => ({ ...s, chantiers: [{ ...c, id: generateUUID(), updatedAt: new Date().toISOString() }, ...s.chantiers] }));
+      const newChantier = { ...c, id: generateUUID(), updatedAt: new Date().toISOString() };
+      setSt(s => ({ ...s, chantiers: [newChantier, ...s.chantiers] }));
       showToast("Dossier créé");
+      return newChantier;
     },
     updateChantier: (id, d) => setSt(s => ({ ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, ...d, updatedAt: new Date().toISOString() } : x) })),
 
