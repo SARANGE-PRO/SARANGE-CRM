@@ -39,27 +39,42 @@ sarange-app/
 │   │   ├── ProductEditor.jsx   # [LOGIC] Éditeur Menuiserie (The Brain)
 │   │   ├── DrawingCanvas.jsx   # [UI] Zone de dessin vectoriel
 │   │  ### 3.2. Hiérarchie des Composants
-`App.jsx` agit comme contrôleur principal et routeur.
+`App.jsx` agit comme contrôleur principal et routeur (Architecture ERP Multi-Modules).
 
 *   `App.jsx`
-    *   `Layout` (Sidebar + Main Content)
-        *   `AppHeader` (Nouveau : Header unifié avec menu, mode sombre, synchro)
-    *   `Views`
-        *   `DashboardView` (Vue principale, liste des chantiers)
-            *   *Utilise `ChantierCard` pour l'affichage des dossiers*
-        *   `CalendarView` (Vue calendrier)
-            *   *Utilise `ChantierCard` pour le détail des RDV*
-        *   `MapView` (Vue carte Leaflet)
+    *   `Sidebar` (Navigation principale latérale)
+    *   `Main Content` (Routage dynamique)
+        *   `MetrageModule` (Sous-module "Bureau d'Études" avec navigation interne)
+            *   `DashboardView` (Accueil, liste des chantiers)
+            *   `CalendarView` (Planning)
+            *   `MapView` (Carte Leaflet)
+        *   `SettingsView` (Paramètres)
         *   `TrashView` (Corbeille)
-        *   `SettingsView` (Paramètres, Synchro)
         *   `ChantierDetailView` (Détail d'un chantier, lazy-loaded)
+        *   `CommercialModule` (Sous-module CRM avec vue Kanban des leads)
+        *   *Placeholders en construction* (Atelier, Stocks, Terrain, Finances)
     *   `Modals` (Portals)
        *   `NewChantierModal`
+        *   `NewLeadModal` (Saisie rapide CRM / 1er Contact)
+        *   `CommercialDetailModal` (Détails et édition d'un lead depuis le Kanban du CRM)
        *   `PlanningModal`
 
-### 3.3. Composants Réutilisables (`js/components/`)
+### 3.3. Routage & Workflow (Assignation / Bifurcation)
+Le routage d'un dossier entre les modules n'est pas automatique ou basé sur un paramètre global, mais est piloté par la propriété `assignation` (`'COMMERCIAL'`, `'METRAGE'`, `'ATELIER'`).
+
+**Bifurcation à la Signature (Workflow Commercial)** :
+Le passage au statut `SIGNED` ne transfère pas automatiquement le dossier. Il déclenche une proposition logicielle pour déterminer la suite de la production :
+*   **Option A : Bureau d'Études (`METRAGE`)**. Cas général (nécessite une prise de cotes sur le terrain).
+*   **Option B : Atelier (`ATELIER`)**. Cas spécifique (fabrication directe, métrage déjà fourni par le client/artisan).
+
+**Workflow Technique** :
+*   `METRAGE` -> `SENT` = Proposition logicielle de transfert vers `ATELIER`.
+
+### 3.4. Composants Réutilisables (`js/components/`)
 *   `AppHeader.jsx` : En-tête global responsive.
-*   `ChantierCard.jsx` : Carte de présentation d'un dossier (utilisée dans Dashboard et Calendrier).
+*   **Clivage des Cartes de Dossier** :
+    *   `ChantierCard.jsx` : Carte technique (utilisée dans Dashboard Métreur et Calendrier). Axée sur les dates d'intervention et statuts d'envoi.
+    *   `CommercialCard.jsx` : Carte orientée CRM (utilisée dans le Kanban Commercial). Axée sur le contact rapide (téléphone/mail direct) et les actions de vente (Chiffrer, Relancer, Gagné).
 *   `PlanningModal.jsx` : Modale de planification de date.
 *   `SmartAddress.jsx` : Affichage intelligent d'adresse avec lien GPS.
 *   `SignatureCanvas.jsx` : Zone de signature tactile. Devis (PDF OCR/Parser)
@@ -94,7 +109,11 @@ Les données sont stockées sous forme d'objets JSON dans **IndexedDB** (local) 
 | Clé | Type | Obligatoire ? | Description |
 | :--- | :--- | :---: | :--- |
 | `id` | `UUID` (string) | ✅ | Identifiant unique (v4). |
-| `date` | `ISO8601` (string) | ✅ | Date de création. |
+| `date` | `ISO8601` (string) | ✅ | Date de création globale. |
+| `dateCreation` | `ISO8601` (string) | ❌ | Date de d'entrée du Lead (CRM). |
+| `dateEnvoi` | `ISO8601` (string) | ❌ | Date d'envoi du devis (CRM). |
+| `dateRelance` | `ISO8601` (string) | ❌ | Date de mise en relance (CRM). |
+| `dateSignature` | `ISO8601` (string) | ❌ | Date de signature du devis (CRM). |
 | `updatedAt` | `ISO8601` (string) | ✅ | **CRITIQUE**. Timestamp de dernière modif pour la Sync. |
 | `client` | `string` | ✅ | Nom du client. |
 | `telephone` | `string` | ✅ | Format libre. |
@@ -103,7 +122,9 @@ Les données sont stockées sous forme d'objets JSON dans **IndexedDB** (local) 
 | `typeContrat` | `enum` | ✅ | `'FOURNITURE_SEULE'`, `'FOURNITURE_ET_POSE'`, `'SOUS_TRAITANCE'` |
 | `clientFinal` | `string` | ❌ | Requis si `SOUS_TRAITANCE`. |
 | `adresseFinale` | `string` | ❌ | Requis si `SOUS_TRAITANCE`. |
-| `status` | `enum` | ✅ | `'DRAFT'` (Brouillon), `'SENT'` (Envoyé), `'SIGNED'` (Signé). |
+| `status` | `enum` | ✅ | Pipeline CRM: `'LEAD'` -> `'SENT'` -> `'RELANCE'` -> `'SIGNED'`. |
+| `assignation` | `enum` | ❌ | Routage module: `'COMMERCIAL'`, `'METRAGE'`, `'ATELIER'`. Détermine l'affichage. Transfert conditionné par le statut (ex: SIGNED -> METRAGE). |
+| `commercialRelance` | `boolean` | ❌ | *Déprécié* (Remplacé en V2 par `status: 'RELANCE'`). |
 | `archived` | `boolean` | ❌ | `true` si > 10 jours sans modif (Auto-Archive). |
 | `deleted` | `boolean` | ❌ | `true` si mis à la corbeille (Soft Delete). |
 | `purged` | `boolean` | ❌ | `true` si supprimé définitivement (attente GC). |
@@ -518,14 +539,15 @@ Lors de l'importation d'un devis, le système :
 
 ### 🔒 Whitelisting (Frontend)
 
-L'accès à l'application est strictement restreint aux utilisateurs autorisés.
+L'accès à l'application est strictement restreint via un système de privilèges Role-Based Access Control (RBAC).
 
 * **Fichier** : [`js/app.jsx`](file:///d:/sarange-app/js/app.jsx)
-* **Mécanisme** : Constante `ALLOWED_EMAILS`.
+* **Mécanisme** : Objet de configuration `APP_USERS`.
 * **Flux de Contrôle** :
     1. L'utilisateur se connecte via Google Sign-In.
-    2. Le composant `App` vérifie si `user.email` est présent dans `ALLOWED_EMAILS`.
-    3. **Si Non Autorisé** :
+    2. Le composant `App` vérifie si `user.email` est présent comme clé dans `APP_USERS`.
+    3. Les utilisateurs ont des rôles métiers : `ADMIN`, `COMMERCIAL`, `METREUR`, `ATELIER`, `TERRAIN`, `COMPTA`.
+    4. **Si Non Autorisé** :
         * Le chargement des données (`runBoot`) est **bloqué**.
         * Un écran d'alerte rouge affiche "Accès Refusé".
         * L'utilisateur ne peut que se déconnecter.

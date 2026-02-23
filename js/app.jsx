@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertCircle, Loader, Lock, LogOut } from 'lucide-react';
+import { AlertCircle, Loader, Lock, LogOut, Menu } from 'lucide-react';
 import { Spinner } from "./components/ui/Spinner.jsx";
 
 // Firebase imports
@@ -9,25 +9,30 @@ import { ref, set, get, child, update, remove, onValue } from "firebase/database
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 
 import { DB, Logger } from "./db.js";
-import { generateUUID, mergeArraysSecure, sanitizeForFirebase } from "./utils.js";
+import { generateUUID, mergeArraysSecure, sanitizeForFirebase, COMMERCIAL_STATUS } from "./utils.js";
 import { Button } from "./components/ui/Button.jsx"
 import { Toast } from "./components/ui/Toast.jsx";
 import { AppContext } from "./context.js";
 import { initCalendarClient, deleteGoogleEvent, manageGoogleEvent } from "./utils/googleCalendar.js";
 import { ErrorBoundary } from "./components/ErrorBoundary.jsx";
 
-// Vues
-const DashboardView = React.lazy(() => import("./views/DashboardView.jsx").then(m => ({ default: m.DashboardView })));
+const MetrageModule = React.lazy(() => import("./views/MetrageModule.jsx").then(m => ({ default: m.MetrageModule })));
+const CommercialModule = React.lazy(() => import("./views/CommercialModule.jsx").then(m => ({ default: m.CommercialModule })));
 const ChantierDetailView = React.lazy(() => import("./views/ChantierDetailView.jsx").then(m => ({ default: m.ChantierDetailView })));
 const SettingsView = React.lazy(() => import("./views/SettingsView.jsx").then(m => ({ default: m.SettingsView })));
 const TrashView = React.lazy(() => import("./views/TrashView.jsx").then(m => ({ default: m.TrashView })));
-const CalendarView = React.lazy(() => import("./views/CalendarView.jsx"));
-const MapView = React.lazy(() => import("./views/MapView.jsx"));
 
 // Layout
-import { AppLayout } from "./components/AppLayout.jsx";
+import { Sidebar } from "./components/Sidebar.jsx";
 
-const ALLOWED_EMAILS = ['contact@sarange.fr'];
+export const APP_USERS = {
+  "contact@sarange.fr": { role: "ADMIN", name: "Direction" },
+  "commercial@sarange.fr": { role: "COMMERCIAL", name: "Commercial" },
+  "metreur@sarange.fr": { role: "METREUR", name: "Bureau d'Études" },
+  "atelier@sarange.fr": { role: "ATELIER", name: "Atelier & Fab" },
+  "terrain@sarange.fr": { role: "TERRAIN", name: "Planning & Pose" },
+  "compta@sarange.fr": { role: "COMPTA", name: "Facturation" }
+};
 
 /* --- LOGIN SCREEN COMPONENT --- */
 const LoginScreen = ({ error }) => {
@@ -121,13 +126,13 @@ const App = () => {
       }
       // Restore last navigation tab (calendar, map, dashboard)
       const lastTab = localStorage.getItem('sarange_last_nav_tab');
-      if (lastTab && ['dashboard', 'calendar', 'map'].includes(lastTab)) {
+      if (lastTab && ['dashboard', 'commercial', 'metrage', 'atelier', 'stocks', 'terrain', 'finances'].includes(lastTab)) {
         return { view: lastTab, currentChantierId: null };
       }
     } catch (e) {
       console.warn("Session Restore Fail", e);
     }
-    return { view: 'dashboard', currentChantierId: null };
+    return { view: 'metrage', currentChantierId: null };
   };
 
   const initialSession = getInitialSession();
@@ -139,6 +144,7 @@ const App = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [firebaseConnected, setFirebaseConnected] = useState(false);
   const [toast, setToast] = useState(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // --- SESSION PERSISTENCE ---
   useEffect(() => {
@@ -150,7 +156,7 @@ const App = () => {
     localStorage.setItem('sarange_session_v1', JSON.stringify(sessionData));
 
     // Persist last navigation tab (for main nav views only)
-    if (['dashboard', 'calendar', 'map'].includes(view)) {
+    if (['dashboard', 'commercial', 'metrage', 'atelier', 'stocks', 'terrain', 'finances'].includes(view)) {
       localStorage.setItem('sarange_last_nav_tab', view);
     }
   }, [view, st.currentChantierId]);
@@ -301,7 +307,7 @@ const App = () => {
   };
 
   useEffect(() => {
-    if (user && ALLOWED_EMAILS.includes(user.email)) {
+    if (user && APP_USERS[user.email]) {
       runBoot();
     }
   }, [user]);
@@ -337,7 +343,7 @@ const App = () => {
   const saveTimeout = useRef(null);
   useEffect(() => {
     // Only autosave if logged in and allowed
-    if (!user || !ALLOWED_EMAILS.includes(user.email)) return;
+    if (!user || !APP_USERS[user.email]) return;
     if (boot.loading) return;
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
 
@@ -381,10 +387,70 @@ const App = () => {
 
   const act = React.useMemo(() => ({
     addChantier: c => {
-      const newChantier = { ...c, id: generateUUID(), updatedAt: new Date().toISOString() };
+      const newChantier = { ...c, id: generateUUID(), assignation: 'METRAGE', updatedAt: new Date().toISOString() };
       setSt(s => ({ ...s, chantiers: [newChantier, ...s.chantiers] }));
       showToast("Dossier créé");
       return newChantier;
+    },
+    createNewLead: data => {
+      const now = new Date().toISOString();
+      const newLead = {
+        id: generateUUID(),
+        client: data.client,
+        telephone: data.telephone || '',
+        email: data.email || '',
+        adresse: data.adresse,
+        source: data.source || 'Autre',
+        notes: data.notes || '',
+        status: COMMERCIAL_STATUS.LEAD,
+        assignation: 'COMMERCIAL',
+        date: now,
+        dateCreation: now,
+        updatedAt: now
+      };
+      setSt(s => ({ ...s, chantiers: [newLead, ...s.chantiers] }));
+      showToast("Nouveau Lead créé");
+      return newLead;
+    },
+    promoteLeadToSent: (id, montantTTC) => {
+      const now = new Date().toISOString();
+      setSt(s => ({
+        ...s,
+        chantiers: s.chantiers.map(x => x.id === id ? {
+          ...x,
+          status: COMMERCIAL_STATUS.SENT,
+          ...(montantTTC !== null && montantTTC !== undefined ? { montantTTC } : {}),
+          dateEnvoi: now,
+          updatedAt: now
+        } : x)
+      }));
+      showToast("Lead passé en Devis Envoyé");
+    },
+    markForRelance: id => {
+      const now = new Date().toISOString();
+      setSt(s => ({
+        ...s,
+        chantiers: s.chantiers.map(x => x.id === id ? {
+          ...x,
+          status: COMMERCIAL_STATUS.RELANCE,
+          dateRelance: now,
+          updatedAt: now
+        } : x)
+      }));
+      showToast("Dossier marqué pour Relance");
+    },
+    markAsSigned: id => {
+      const now = new Date().toISOString();
+      setSt(s => ({
+        ...s,
+        chantiers: s.chantiers.map(x => x.id === id ? {
+          ...x,
+          status: COMMERCIAL_STATUS.SIGNED,
+          dateSignature: now,
+          updatedAt: now
+        } : x)
+      }));
+      showToast("Dossier gagné !");
     },
     updateChantier: (id, d) => setSt(s => ({ ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, ...d, updatedAt: new Date().toISOString() } : x) })),
 
@@ -406,7 +472,7 @@ const App = () => {
         // 🚨 CRITICAL: Force Save immediately (bypass debounce) to avoid data loss if app closed
         DB.set('sarange_root', newState).catch(e => console.error("Force Save Local Fail", e));
 
-        if (navigator.onLine && user && ALLOWED_EMAILS.includes(user.email)) {
+        if (navigator.onLine && user && APP_USERS[user.email]) {
           const updates = {};
           updates['sarange_root/chantiers/' + id] = newState.chantiers.find(c => c.id === id);
           updates['sarange_root/lastWriteTime'] = newState.lastWriteTime;
@@ -610,7 +676,7 @@ const App = () => {
 
   if (!user) return <LoginScreen />;
 
-  if (!ALLOWED_EMAILS.includes(user.email)) {
+  if (!APP_USERS[user.email]) {
     return <LoginScreen error={`Accès Refusé : Le compte ${user.email} n'est pas autorisé.`} />;
   }
 
@@ -620,38 +686,61 @@ const App = () => {
   // Fallback component
   const LoadingScreen = () => <div className="h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900"><Spinner size={40} className="text-brand-600" /></div>;
 
+  const isFocusMode = Boolean(st.currentChantierId) || ['settings', 'trash'].includes(view);
+
+  // Helper to ensure Sidebar closes on navigation in mobile
+  const handleNavigate = (newView) => {
+    setView(newView);
+    setIsMobileMenuOpen(false);
+  };
+
   return (
     <AppContext.Provider value={{ state: st, ...act, navigate: setView, setReturnView: (v) => setSt(s => ({ ...s, returnView: v })) }}>
       <ErrorBoundary>
         <Suspense fallback={<LoadingScreen />}>
-          <AppLayout currentView={view} onNavigate={setView}>
-            {view === 'settings' ?
-              <SettingsView onBack={() => setView('dashboard')} state={st} onImport={act.importData} /> :
-              view === 'trash' ?
-                <TrashView onBack={() => setView('dashboard')} state={st} actions={act} /> :
-                view === 'calendar' ?
-                  <CalendarView
-                    isDark={dark}
-                    toggleDark={() => setDark(!dark)}
-                    onOpenSettings={() => setView('settings')}
-                    onOpenTrash={() => setView('trash')}
-                    isOnline={isOnline}
-                    firebaseConnected={firebaseConnected}
-                  /> :
-                  view === 'map' ?
-                    <MapView
-                      isDark={dark}
-                      toggleDark={() => setDark(!dark)}
-                      onOpenSettings={() => setView('settings')}
-                      onOpenTrash={() => setView('trash')}
-                      isOnline={isOnline}
-                      firebaseConnected={firebaseConnected}
-                    /> :
-                    !st.currentChantierId ?
-                      <DashboardView
+          <div className="flex bg-slate-50 dark:bg-slate-900 overflow-hidden w-full h-screen lg:h-screen supports-[height:100dvh]:h-[100dvh] relative">
+            {!isFocusMode && (
+              <>
+                {/* Mobile Backdrop Overlay */}
+                {isMobileMenuOpen && (
+                  <div
+                    className="fixed inset-0 bg-black/50 z-40 md:hidden"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  />
+                )}
+                {/* Sidebar Container */}
+                <div className={`
+                  fixed md:static inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out
+                  ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+                `}>
+                  <Sidebar currentView={view} onNavigate={handleNavigate} onClose={() => setIsMobileMenuOpen(false)} />
+                </div>
+              </>
+            )}
+            <main className="flex-1 overflow-hidden relative">
+              {/* Mobile Header Toggle (Only visible if navigation exists and we aren't in focus mode) */}
+              {!isFocusMode && (
+                <div className="md:hidden absolute top-4 left-4 z-30">
+                  <button
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
+                  >
+                    <Menu size={20} />
+                  </button>
+                </div>
+              )}
+
+              {view === 'settings' ?
+                <SettingsView onBack={() => setView('dashboard')} state={st} onImport={act.importData} /> :
+                view === 'trash' ?
+                  <TrashView onBack={() => setView('dashboard')} state={st} actions={act} /> :
+                  st.currentChantierId ?
+                    <ChantierDetailView /> :
+                    ['metrage', 'new'].includes(view) ?
+                      <MetrageModule
                         onNew={() => setView('new')}
+                        onNavigate={setView}
                         viewMode={view}
-                        setViewMode={setView}
                         isDark={dark}
                         toggleDark={() => setDark(!dark)}
                         onOpenSettings={() => setView('settings')}
@@ -659,8 +748,29 @@ const App = () => {
                         isOnline={isOnline}
                         firebaseConnected={firebaseConnected}
                       /> :
-                      <ChantierDetailView />}
-          </AppLayout>
+                      view === 'commercial' ?
+                        <CommercialModule
+                          state={st}
+                          selectChantier={act.selectChantier}
+                          onNew={() => setView('new')}
+                          isDark={dark}
+                          toggleDark={() => setDark(!dark)}
+                          onOpenSettings={() => setView('settings')}
+                          onOpenTrash={() => setView('trash')}
+                          isOnline={isOnline}
+                          firebaseConnected={firebaseConnected}
+                        /> :
+                        ['dashboard', 'atelier', 'stocks', 'terrain', 'finances'].includes(view) ?
+                          <div className="flex h-full items-center justify-center p-8 bg-white dark:bg-slate-800 m-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+                            <div className="text-center">
+                              <h2 className="text-3xl font-bold text-slate-700 dark:text-slate-300 mb-4">Module en construction...</h2>
+                              <p className="text-slate-500 dark:text-slate-400 text-lg">Cette vue de l'ERP sera bientôt disponible.</p>
+                            </div>
+                          </div> :
+                          null
+              }
+            </main>
+          </div>
         </Suspense>
       </ErrorBoundary>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}

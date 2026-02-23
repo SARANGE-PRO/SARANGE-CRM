@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus, AlertCircle, Search, CheckCircle, Calendar, Phone, Copy, Trash2, ArrowRight, UserCheck } from 'lucide-react';
-import { AppHeader } from "../components/AppHeader.jsx";
 import { Button } from "../components/ui/Button.jsx";
 import { checkUrgency } from "../utils/calendar.js";
 import { Input } from "../components/ui/Input.jsx";
@@ -56,7 +55,7 @@ const MobileNavTiles = ({ activeTab, onTabChange, counts }) => {
     );
 };
 
-export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpenTrash, isOnline, firebaseConnected }) => {
+export const DashboardView = ({ onNew, isDark, toggleDark, showArchived }) => {
     const { state, selectChantier, deleteChantier, duplicateChantier, updateChantier, addChantier, updateChantierDate } = useApp();
     const [s, setS] = useState('');
     const [m, setM] = useState(false); // New Modal
@@ -77,8 +76,7 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
     };
 
     // Filter & Sort
-    const [showArchived, setShowArchived] = useState(false);
-    const allChantiers = (state.chantiers || []).filter(c => !c.deleted && !c.purged);
+    const allChantiers = (state.chantiers || []).filter(c => !c.deleted && !c.purged && (!c.assignation || c.assignation === 'METRAGE'));
     const countArchived = allChantiers.filter(c => c.archived).length;
 
     // Urgency Check
@@ -147,19 +145,6 @@ export const DashboardView = ({ onNew, isDark, toggleDark, onOpenSettings, onOpe
 
     return (
         <div className="flex flex-col h-full w-full bg-slate-50 dark:bg-slate-900 overflow-hidden">
-            {/* HEADER (Sticky Removed -> Flex Item) */}
-            <AppHeader
-                isDark={isDark}
-                toggleDark={toggleDark}
-                onOpenSettings={onOpenSettings}
-                onOpenTrash={onOpenTrash}
-                showArchived={showArchived}
-                setShowArchived={setShowArchived}
-                countArchived={countArchived}
-                isOnline={isOnline}
-                firebaseConnected={firebaseConnected}
-            />
-
             {/* SEARCH BAR (Distinct from Header in Dashboard) */}
             <div className="flex-none bg-white dark:bg-slate-900 px-4 pt-3 pb-3 border-b border-slate-200 dark:border-slate-800">
                 <div className="w-full mx-auto relative flex gap-2">

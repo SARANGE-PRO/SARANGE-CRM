@@ -7,6 +7,13 @@ export const generateUUID = () =>
             return v.toString(16);
         });
 
+export const COMMERCIAL_STATUS = {
+    LEAD: 'LEAD',
+    SENT: 'SENT',
+    RELANCE: 'RELANCE',
+    SIGNED: 'SIGNED'
+};
+
 /**
  * Nettoie un objet pour Firebase (remplace undefined par null)
  * Firebase refuse les valeurs undefined et plante la synchro.

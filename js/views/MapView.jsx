@@ -4,7 +4,6 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Map as MapIcon, MapPin, ExternalLink } from 'lucide-react';
 import { useApp } from '../context.js';
-import { AppHeader } from "../components/AppHeader.jsx";
 
 // Fix pour les icônes Leaflet avec Vite/Webpack
 // Utilisation d'un divIcon personnalisé au lieu de l'icône par défaut
@@ -22,7 +21,7 @@ const createCustomIcon = (color = '#3b82f6') => {
     });
 };
 
-export const MapView = ({ isDark, toggleDark, onOpenSettings, onOpenTrash, isOnline, firebaseConnected }) => {
+export const MapView = ({ isDark, toggleDark }) => {
     const { state, selectChantier, navigate, setReturnView } = useApp();
 
     // Filtrer les chantiers avec coordonnées GPS
@@ -61,18 +60,6 @@ export const MapView = ({ isDark, toggleDark, onOpenSettings, onOpenTrash, isOnl
 
     return (
         <div className="flex flex-col h-full lg:h-full supports-[height:100dvh]:h-[100dvh] bg-slate-50 dark:bg-slate-900 overflow-hidden">
-            {/* Header */}
-            <AppHeader
-                title="Carte des Chantiers"
-                subtitle={`${chantiersWithGPS.length} chantier${chantiersWithGPS.length > 1 ? 's' : ''} localisé${chantiersWithGPS.length > 1 ? 's' : ''}`}
-                isDark={isDark}
-                toggleDark={toggleDark}
-                onOpenSettings={onOpenSettings}
-                onOpenTrash={onOpenTrash}
-                isOnline={isOnline}
-                firebaseConnected={firebaseConnected}
-            />
-
             {/* Legend Sub-header */}
             <div className="flex-none bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-2">
                 <div className="flex gap-4 text-xs justify-center">

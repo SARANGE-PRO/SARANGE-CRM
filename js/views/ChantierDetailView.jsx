@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Edit, Lock, UserCheck, AlertCircle, Plus, Send, Unlock, Trash2, Copy, AlertTriangle, CheckCircle, CheckCircle2, CalendarX, Clock, Calendar, MapPin, FileText, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Edit, Lock, UserCheck, AlertCircle, Plus, Send, Unlock, Trash2, Copy, AlertTriangle, CheckCircle, CheckCircle2, CalendarX, Clock, Calendar, MapPin, FileText, ExternalLink, ArrowRight } from 'lucide-react';
 import { Button } from "../components/ui/Button.jsx";
 import { Modal } from "../components/ui/Modal.jsx";
 import { Checkbox } from "../components/ui/Checkbox.jsx";
@@ -820,6 +820,74 @@ export const ChantierDetailView = () => {
 
             <div className={`flex-1 overflow-y-auto p-4 max-w-5xl mx-auto w-full scroll-smooth ${isLocked ? 'pb-24' : hasUnverified ? 'pb-48' : 'pb-32'}`}>
                 <div id="step-top"></div>
+
+                {/* TRANSFERT COMMERCIAL -> ATELIER/METRAGE */}
+                {ch.assignation === 'COMMERCIAL' && ch.status === 'SIGNED' && (
+                    <div id="step-transfert" className="mb-6 bg-white dark:bg-slate-900 rounded-xl p-6 shadow-lg border-2 border-green-500 animate-fade-in relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-green-50 dark:bg-green-900/10 rounded-full -mr-10 -mt-10 blur-xl"></div>
+                        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left relative z-10">
+                            <div className="bg-green-100 dark:bg-green-900/30 p-3 rounded-full text-green-600 dark:text-green-400 shrink-0">
+                                <CheckCircle size={32} />
+                            </div>
+                            <div className="flex-1 w-full">
+                                <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-1">
+                                    Deal Gagné ! 🎉
+                                </h3>
+                                <p className="text-slate-500 text-sm mb-4">
+                                    Ce dossier a été signé. Où souhaitez-vous l'envoyer pour la suite ?
+                                </p>
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                    <Button
+                                        variant="primary"
+                                        className="font-bold flex-1"
+                                        onClick={() => updateChantier(ch.id, { assignation: 'METRAGE' })}
+                                        icon={ArrowRight}
+                                    >
+                                        Bureau d'Étude (Métrage)
+                                    </Button>
+                                    <Button
+                                        variant="secondary"
+                                        className="font-bold border-slate-200 text-slate-700 bg-white hover:bg-slate-50 flex-1"
+                                        onClick={() => updateChantier(ch.id, { assignation: 'ATELIER' })}
+                                        icon={ArrowRight}
+                                    >
+                                        Directement à l'Atelier
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* TRANSFERT METRAGE -> ATELIER */}
+                {ch.assignation === 'METRAGE' && ch.sendStatus === 'SENT' && (
+                    <div id="step-transfert-metrage" className="mb-6 bg-white dark:bg-slate-900 rounded-xl p-6 shadow-lg border-2 border-brand-500 animate-fade-in relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-brand-50 dark:bg-brand-900/10 rounded-full -mr-10 -mt-10 blur-xl"></div>
+                        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left relative z-10">
+                            <div className="bg-brand-100 dark:bg-brand-900/30 p-3 rounded-full text-brand-600 dark:text-brand-400 shrink-0">
+                                <CheckCircle size={32} />
+                            </div>
+                            <div className="flex-1 w-full">
+                                <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-1">
+                                    Métrage Terminé !
+                                </h3>
+                                <p className="text-slate-500 text-sm mb-4">
+                                    Le dossier de métrage a été validé et envoyé. Transférer à l'équipe de fabrication ?
+                                </p>
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                    <Button
+                                        variant="primary"
+                                        className="font-bold w-full sm:w-auto px-8"
+                                        onClick={() => updateChantier(ch.id, { assignation: 'ATELIER' })}
+                                        icon={ArrowRight}
+                                    >
+                                        Transférer à l'Atelier
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {needsPlanning && (
                     <div id="step-planning" className="mb-6 bg-white dark:bg-slate-900 rounded-xl p-6 shadow-lg border-2 border-brand-500 animate-fade-in">
