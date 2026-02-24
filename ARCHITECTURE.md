@@ -132,6 +132,7 @@ Les données sont stockées sous forme d'objets JSON dans **IndexedDB** (local) 
 | `history` | `object[]` | ❌ | Traceabilité. `{ date: ISO, action: 'UNLOCK', reason: string, details?: string, user: string }` |
 | `quoteFileId` | `UUID` | ❌ | ID du fichier PDF stocké dans le store local `files`. |
 | `quoteFileName` | `string` | ❌ | Nom du fichier original. |
+| `attachments` | `object[]` | ❌ | Fichiers annexes: `[{ id: UUID, name: string, type: string, date: ISO8601 }]`. Binaires dans le store `files`. |
 | `referenceDevis` | `string` | ❌ | Numéro de devis extrait (ex: "12345"). |
 | `notes` | `string` | ❌ | Infos supplémentaires (Code d'accès, etc.). Synchro GCal. |
 
@@ -213,6 +214,19 @@ Amélioration UX pour le redémarrage de l'application.
   * **SINON** (expiration ou autre vue) : Force le retour au **Dashboard** (`activeChantierId = null`).
 * **Persistance** : Mise à jour du timestamp à chaque changement de vue ou de dossier.
 * **Avantage** : Permet de reprendre un travail en cours après un refresh, mais évite de rester bloqué sur un vieux dossier après une longue pause.
+
+### 3.5 Envoi de Devis & Signature (Fusion SignatureDevis)
+
+L'ancien outil externe `admin.html` (SignatureDevis) a été fusionné directement dans le CRM via la modale `CommercialDetailModal.jsx`.
+
+**Flux d'envoi d'un devis au client :**
+1. **Drop du PDF** dans la zone des pièces jointes de `CommercialDetailModal.jsx`.
+2. **Parsing Automatique** : `QuoteParserService.js` extrait instantanément le Numéro de devis, le Total TTC, et détecte la présence de TVA réduite (5.5% ou 10%). Les champs du dossier sont pré-remplis en temps réel.
+3. **Auto-Fill Dossier** : Si les informations vitales du client (N°, Nom, Adresse, Email, Montant TTC) sont vides au niveau du `Chantier`, les données extraites du devis viennent automatiquement remplir ces cases sans effort manuel.
+4. **Validation & Envoi** : L'utilisateur clique sur "Envoyer vers Sheet + Mail".
+5. **Upload Drive** : Le PDF est uploadé silencieusement sur Google Drive (permissions `anyone:reader`) à l'aide de l'API Drive (`gapi.client`) avec le token.
+6. **Appel GAS (Webhook)** : Le backend Apps Script est appelé avec le payload contenant l'ID Drive et les infos client pour envoyer l'email de demande de signature interactif.
+7. **Mise à jour CRM** : Le statut du `Chantier` passe automatiquement de `LEAD` à `SENT` (Devis Envoyé) et la modale se ferme.
 
 ---
 
