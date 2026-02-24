@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Plus, GripVertical, Cloud, CloudOff, AlertCircle, Menu, Sun, Moon, Archive, Trash2, Settings, Search } from 'lucide-react';
 import { Button } from "../components/ui/Button.jsx";
 import { CommercialCard } from "../components/CommercialCard.jsx";
@@ -61,6 +61,75 @@ export const CommercialModule = ({
         ];
     }, [chantiers]);
 
+    // --- AUTO-SIGNATURE CHECKING LOGIC ---
+    // We only want to check the server periodically so we don't spam it.
+    // We use a ref to prevent overlapping checks if one takes too long.
+    const isCheckingSignatures = useRef(false);
+
+    useEffect(() => {
+        const checkSignatures = async () => {
+            if (isCheckingSignatures.current || !isOnline) return;
+            isCheckingSignatures.current = true;
+
+            try {
+                // Find all active sent quotes that have a quote number
+                const envoyesToCheck = chantiers.filter(c =>
+                    (c.status === COMMERCIAL_STATUS.SENT || c.status === COMMERCIAL_STATUS.RELANCE) &&
+                    c.extractedQuoteNumber
+                );
+
+                if (envoyesToCheck.length === 0) {
+                    isCheckingSignatures.current = false;
+                    return;
+                }
+
+                // Use the main GAS Webhook URL (Make sure it's the exact one deployed)
+                const ADMIN_API_URL = 'https://script.google.com/macros/s/AKfycbzTS1SgE9Lg3WlFHrC5q-jsfVUXMlk0fGStJQOw2yQGM1AIssJ8-hEtKls5cJTiEvxw/exec';
+
+                // Check them one by one to avoid overwhelming Apps Script quotas
+                for (const chantier of envoyesToCheck) {
+                    try {
+                        console.log(`[Auto-Sync] Vérification du devis ${chantier.extractedQuoteNumber}...`);
+
+                        // Sécurité: forcer la chaîne de caractères et enlever les espaces
+                        const devisNumTreated = String(chantier.extractedQuoteNumber).trim();
+
+                        const response = await fetch(`${ADMIN_API_URL}?check=${devisNumTreated}`);
+                        if (response.ok) {
+                            const data = await response.json();
+
+                            // Afficher l'objet sous forme de texte pour qu'il soit bien lisible d'un coup dans la console
+                            console.log(`[Auto-Sync] Réponse pour devis ${devisNumTreated}:`, JSON.stringify(data));
+
+                            if (data.signed === true || data.signed === 'true') {
+                                console.log(`[Auto-Sync] 🎉 Devis ${chantier.extractedQuoteNumber} détecté comme signé ! Mise à jour...`);
+                                updateChantier(chantier.id, {
+                                    status: COMMERCIAL_STATUS.SIGNED,
+                                    dateSignature: new Date().toISOString()
+                                });
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Erreur vérification signature auto pour', chantier.extractedQuoteNumber, err);
+                    }
+                    // Small delay between checks
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            } finally {
+                isCheckingSignatures.current = false;
+            }
+        };
+
+        // Run immediately on mount
+        checkSignatures();
+
+        // Then check every 3 minutes (180000 ms)
+        const intervalId = setInterval(checkSignatures, 180000);
+
+        return () => clearInterval(intervalId);
+    }, [chantiers, updateChantier, isOnline]);
+    // --- END AUTO-SIGNATURE CHECKING LOGIC ---
+
     // Drag and Drop Handlers
     const handleDragStart = (e, chantierId) => {
         setDraggedId(chantierId);
@@ -96,6 +165,70 @@ export const CommercialModule = ({
 
         setDraggedId(null);
     };
+
+    // --- RELANCE ACTION HANDLER ---
+    const handleRelanceAction = async (chantier, level, actionType) => {
+        if (!chantier) return;
+
+        const ADMIN_API_URL = 'https://script.google.com/macros/s/AKfycbzTS1SgE9Lg3WlFHrC5q-jsfVUXMlk0fGStJQOw2yQGM1AIssJ8-hEtKls5cJTiEvxw/exec';
+
+        try {
+            // If the user just clicked "Appelé", we only update the local state to pause the alert.
+            if (actionType === 'phone') {
+                updateChantier(chantier.id, {
+                    relanceLevel: level,
+                    status: COMMERCIAL_STATUS.RELANCE,
+                    dateRelance: new Date().toISOString()
+                });
+                return;
+            }
+
+            // If it's an email action, call the webhook
+            if (actionType === 'email' || actionType === 'email_archive') {
+                // Show some feedback (could be a toast in a fuller app, here we rely on the card updating)
+                const payload = {
+                    action: 'relance_devis',
+                    devis: chantier.extractedQuoteNumber || '',
+                    client: chantier.client || '',
+                    email: chantier.email || '',
+                    relanceLevel: level
+                };
+
+                const response = await fetch(ADMIN_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    // Update state on success
+                    const updates = {
+                        relanceLevel: level,
+                        dateRelance: new Date().toISOString()
+                    };
+
+                    // For level 3, we move to Archive. Since we don't have an Archive status yet in COMMERCIAL_STATUS, 
+                    // we'll set a flag or create a new status if supported. Assuming we reuse PERDU or just filter it out.
+                    // Let's add archived flag so the dashboard can hide it if needed, or simply let it be LOST.
+                    if (actionType === 'email_archive') {
+                        // Assuming you have a LOST or ARCHIVED status. If not, we can just set status to a custom string for now
+                        updates.status = 'ARCHIVED';
+                    } else {
+                        updates.status = COMMERCIAL_STATUS.RELANCE;
+                    }
+
+                    updateChantier(chantier.id, updates);
+                } else {
+                    alert('Erreur lors de l\'envoi de l\'email de relance : ' + (result.message || 'Erreur inconnue'));
+                }
+            }
+        } catch (error) {
+            console.error('Erreur handleRelanceAction:', error);
+            alert('Impossible de joindre le serveur pour la relance.');
+        }
+    };
+
 
     return (
         <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900">
@@ -258,6 +391,7 @@ export const CommercialModule = ({
                                                     onPromoteToSent={promoteLeadToSent}
                                                     onMarkForRelance={markForRelance}
                                                     onMarkAsSigned={markAsSigned}
+                                                    onTriggerRelanceAction={handleRelanceAction}
                                                 />
                                             </div>
                                         </div>

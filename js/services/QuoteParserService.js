@@ -381,18 +381,94 @@ class QuoteParserService {
         };
     }
 
-    extractClientInfo(text) {
-        const info = { name: "", address: "", number: "" };
+    async extractQuoteData(file) {
+        await this.init();
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await this.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-        // Regex Numero Devis Stricte
+        let fullText = "";
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+
+            const items = content.items.map((item) => ({
+                str: item.str,
+                x: item.transform[4],
+                y: item.transform[5],
+            }));
+
+            items.sort((a, b) => {
+                const dy = b.y - a.y;
+                if (Math.abs(dy) > 5) return dy;
+                return a.x - b.x;
+            });
+
+            let pageText = "";
+            let lastY = items.length > 0 ? items[0].y : 0;
+            for (const item of items) {
+                if (Math.abs(item.y - lastY) > 5) pageText += "\n";
+                pageText += item.str + " ";
+                lastY = item.y;
+            }
+            fullText += pageText + "\n";
+        }
+
+        return this.extractClientInfo(fullText);
+    }
+
+    extractClientInfo(text) {
+        const info = { name: "", address: "", number: "", email: "", totalTTC: null, tvaReduced: false };
+
+        // --- N° Devis ---
         const numberMatch = text.match(/(?:Devis|Offre)\s*(?:N[°o.]?)?\s*[:#]?\s*0*(\d{4,6})/i);
         if (numberMatch) info.number = numberMatch[1];
 
-        const emailMatch = text.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z]{2,6}/);
-        if (emailMatch) info.email = emailMatch[0];
+        // --- Email ---
+        const mailClientMatch = text.match(/Mail\s+client\s*:\s*([a-zA-Z0-9._\-+]+@[a-zA-Z0-9._-]+\.[a-zA-Z]{2,6})/i);
+        if (mailClientMatch) {
+            info.email = mailClientMatch[1].trim();
+        } else {
+            const allEmails = text.match(/[a-zA-Z0-9._\-+]+@[a-zA-Z0-9._-]+\.[a-zA-Z]{2,6}/g) || [];
+            const clientEmail = allEmails.find(e => !/contact@(?:sarange|artertia)/i.test(e));
+            if (clientEmail) info.email = clientEmail;
+        }
 
-        const clientMatch = text.match(/Client\s*:\s*([^\n]+)/i);
-        if (clientMatch) info.name = clientMatch[1].trim();
+        // --- Nom Client + Adresse ---
+        // Excatly like SignatureDevisAPI: we take lines before "Devis N°"
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const devisLineIdx = lines.findIndex(l => /(?:Devis|Offre)\s*(?:N[°o.\s]*)\s*\d/i.test(l));
+
+        if (devisLineIdx > 0) {
+            const headerLines = lines.slice(0, devisLineIdx);
+            // Ignore potential "Client:" lines that got orphaned
+            const cleanHeaderLines = headerLines.filter(l => l.toLowerCase() !== "client :");
+
+            if (cleanHeaderLines.length > 0) {
+                let nameIdx = 0;
+                // Remove email if it ended up in the name by mistake
+                if (cleanHeaderLines[0].includes("@") && cleanHeaderLines.length > 1) {
+                    nameIdx = 1;
+                }
+
+                info.name = cleanHeaderLines[nameIdx].replace(/^Client\s*:\s*/i, "").trim();
+
+                if (cleanHeaderLines.length > nameIdx + 1) {
+                    info.address = cleanHeaderLines.slice(nameIdx + 1).filter(l => !l.includes("@")).join(', ');
+                }
+            }
+        }
+
+        // --- Montant Total TTC ---
+        const ttcMatch = text.match(/MONTANT\s+TOTAL\s+T\.?T\.?C\.?\s*([\d\s]+,\d{2})\s*€?/i);
+        if (ttcMatch) {
+            info.totalTTC = parseFloat(ttcMatch[1].replace(/\s/g, '').replace(',', '.'));
+        }
+
+        // --- Détection TVA Réduite ---
+        if (/T\.V\.A\.\s*à\s*(5,50?|10,00?)\s*%/i.test(text)) {
+            info.tvaReduced = true;
+        }
 
         return info;
     }

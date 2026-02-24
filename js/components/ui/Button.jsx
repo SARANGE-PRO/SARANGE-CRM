@@ -1,4 +1,5 @@
 import React from 'react';
+import { Loader2 } from 'lucide-react';
 
 export const cn = (...parts) => parts.filter(Boolean).join(' ');
 
@@ -8,6 +9,7 @@ export const Button = ({
     children,
     icon: Icon,
     disabled = false,
+    isLoading = false,
     className = '',
     type = 'button',
 }) => {
@@ -20,7 +22,15 @@ export const Button = ({
     };
 
     const content = [];
-    if (Icon) {
+    if (isLoading) {
+        content.push(
+            React.createElement(Loader2, {
+                key: 'icon-loading',
+                size: 18,
+                className: cn('animate-spin', children ? 'mr-2' : ''),
+            })
+        );
+    } else if (Icon) {
         content.push(
             React.createElement(Icon, {
                 key: 'icon',

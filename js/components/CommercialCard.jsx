@@ -1,5 +1,5 @@
 import React from 'react';
-import { Phone, Mail, MapPin, Calendar, CheckCircle2, Clock, Send, Euro, Trash2, Copy } from 'lucide-react';
+import { Phone, Mail, MapPin, Calendar, CheckCircle2, Clock, Send, Euro, Trash2, Copy, AlertCircle } from 'lucide-react';
 import { Button } from "./ui/Button.jsx";
 import { COMMERCIAL_STATUS } from "../utils.js";
 
@@ -10,7 +10,8 @@ export const CommercialCard = ({
     onDelete,
     onPromoteToSent,
     onMarkForRelance,
-    onMarkAsSigned
+    onMarkAsSigned,
+    onTriggerRelanceAction // New prop for executing the specific relance level
 }) => {
 
     const getDynamicDateInfo = () => {
@@ -52,9 +53,33 @@ export const CommercialCard = ({
 
     const sConf = statusConfig[c.status] || statusConfig[COMMERCIAL_STATUS.LEAD];
 
+    // --- RELANCE LOGIC (J+3, J+10, J+30) ---
+    const getRelanceInfo = () => {
+        if (c.status !== COMMERCIAL_STATUS.SENT && c.status !== COMMERCIAL_STATUS.RELANCE) return null;
+
+        const dateRepere = new Date(c.dateEnvoiDevis || c.updatedAt);
+        const diffTime = Math.abs(new Date() - dateRepere);
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        const level = c.relanceLevel || 0;
+
+        if (diffDays >= 30 && level === 2) {
+            return { type: 'R3', label: 'Relance 3 (Clôture) requise', days: diffDays, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-400', shadow: 'shadow-red-100' };
+        }
+        if (diffDays >= 10 && level === 1) {
+            return { type: 'R2', label: 'Relance 2 (Urgence) requise', days: diffDays, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-400', shadow: 'shadow-orange-100' };
+        }
+        if (diffDays >= 3 && level === 0) {
+            return { type: 'R1', label: 'Relance 1 requise', days: diffDays, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-400', shadow: 'shadow-amber-100' };
+        }
+
+        return null; // Pas de relance due
+    };
+
+    const relanceInfo = getRelanceInfo();
+
     return (
         <div
-            className={`bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 transition-all hover:shadow-md cursor-pointer group hover:border-brand-300 dark:hover:border-brand-700`}
+            className={`bg-white dark:bg-slate-800 rounded-xl shadow-sm border ${relanceInfo ? `border-2 ${relanceInfo.border} ${relanceInfo.shadow}` : 'border-slate-200 dark:border-slate-700'} p-4 transition-all hover:shadow-md cursor-pointer group hover:border-brand-300 dark:hover:border-brand-700`}
             onClick={() => onClick(c.id)}
         >
             <div className="flex justify-between items-start mb-3">
@@ -102,52 +127,105 @@ export const CommercialCard = ({
             </div>
 
             {/* QUICK ACTIONS FOOTER */}
-            <div className="pt-3 mt-2 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
-                <div className="flex-1">
-                    {c.status === COMMERCIAL_STATUS.LEAD && (
-                        <Button
-                            variant="primary"
-                            className="w-full text-xs py-1.5 h-auto rounded-lg shadow-sm"
-                            icon={Send}
-                            onClick={(e) => { e.stopPropagation(); onPromoteToSent(c.id); }}
-                        >
-                            Chiffrer / Envoyer
-                        </Button>
-                    )}
-                    {c.status === COMMERCIAL_STATUS.SENT && (
-                        <Button
-                            variant="secondary"
-                            className="w-full text-xs py-1.5 h-auto rounded-lg shadow-sm bg-orange-100/50 text-orange-700 hover:bg-orange-100 border-none font-medium"
-                            icon={Clock}
-                            onClick={(e) => { e.stopPropagation(); onMarkForRelance(c.id); }}
-                        >
-                            Marquer Relancer
-                        </Button>
-                    )}
-                    {c.status === COMMERCIAL_STATUS.RELANCE && (
-                        <Button
-                            variant="secondary"
-                            className="w-full text-xs py-1.5 h-auto rounded-lg shadow-sm bg-green-100/50 text-green-700 hover:bg-green-100 border-none font-bold"
-                            icon={CheckCircle2}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onMarkAsSigned(c.id);
-                                onClick(c.id);
-                            }}
-                        >
-                            Gagné / Signé
-                        </Button>
-                    )}
-                    {c.status === COMMERCIAL_STATUS.SIGNED && (
-                        <div className="w-full text-xs py-1.5 text-center font-bold text-green-600 bg-green-50 rounded-lg flex justify-center items-center gap-1">
-                            <CheckCircle2 size={14} /> Signé
-                        </div>
-                    )}
-                </div>
+            <div className="pt-3 mt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2">
 
-                <div className="flex items-center gap-1 border-l border-slate-200 dark:border-slate-700 pl-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={(e) => { e.stopPropagation(); onDuplicate(c.id); }} className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-md transition-colors" title="Dupliquer"><Copy size={14} /></button>
-                    <button onClick={(e) => { e.stopPropagation(); onDelete(c.id); }} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors" title="Supprimer"><Trash2 size={14} /></button>
+                {/* ALERTE RELANCE (Visible uniquement si relance requise) */}
+                {relanceInfo && (
+                    <div className={`w-full rounded-lg border ${relanceInfo.border} ${relanceInfo.bg} p-2 mb-1`}>
+                        <div className={`text-xs font-bold mb-2 flex items-center gap-1.5 ${relanceInfo.color}`}>
+                            <AlertCircle size={14} className="animate-pulse" /> {relanceInfo.label} (J+{relanceInfo.days})
+                        </div>
+                        <div className="flex flex-col gap-1.5 w-full">
+                            {relanceInfo.type === 'R1' && (
+                                <>
+                                    <Button
+                                        variant="secondary"
+                                        className="w-full text-xs py-1.5 bg-white border border-amber-200 text-amber-700 hover:bg-amber-100 flex justify-center !px-2"
+                                        onClick={(e) => { e.stopPropagation(); onTriggerRelanceAction(c, 1, 'phone'); }}
+                                    >
+                                        📞 Appelé (Sans Succès)
+                                    </Button>
+                                    <Button
+                                        variant="primary"
+                                        className="w-full text-[11px] py-1.5 bg-amber-500 hover:bg-amber-600 border-none flex justify-center !px-2"
+                                        icon={Mail}
+                                        onClick={(e) => { e.stopPropagation(); onTriggerRelanceAction(c, 1, 'email'); }}
+                                    >
+                                        Envoyer Email R1
+                                    </Button>
+                                </>
+                            )}
+                            {relanceInfo.type === 'R2' && (
+                                <Button
+                                    variant="primary"
+                                    className="w-full text-[11px] py-1.5 bg-orange-500 hover:bg-orange-600 border-none flex justify-center !px-2"
+                                    icon={Mail}
+                                    onClick={(e) => { e.stopPropagation(); onTriggerRelanceAction(c, 2, 'email'); }}
+                                >
+                                    Envoyer Email R2 (Urgence)
+                                </Button>
+                            )}
+                            {relanceInfo.type === 'R3' && (
+                                <Button
+                                    variant="primary"
+                                    className="w-full text-[11px] py-1.5 bg-red-600 hover:bg-red-700 border-none flex justify-center !px-2"
+                                    icon={Trash2}
+                                    onClick={(e) => { e.stopPropagation(); onTriggerRelanceAction(c, 3, 'email_archive'); }}
+                                >
+                                    Email de Clôture & Archiver
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex items-center gap-2 w-full">
+                    <div className="flex-1">
+                        {c.status === COMMERCIAL_STATUS.LEAD && (
+                            <Button
+                                variant="primary"
+                                className="w-full text-xs py-1.5 h-auto rounded-lg shadow-sm"
+                                icon={Send}
+                                onClick={(e) => { e.stopPropagation(); onPromoteToSent(c.id); }}
+                            >
+                                Chiffrer / Envoyer
+                            </Button>
+                        )}
+                        {!relanceInfo && c.status === COMMERCIAL_STATUS.SENT && (
+                            <Button
+                                variant="secondary"
+                                className="w-full text-[11px] py-1.5 h-auto rounded-lg shadow-sm bg-orange-100/50 text-orange-700 hover:bg-orange-100 border-none font-medium px-2"
+                                icon={Clock}
+                                onClick={(e) => { e.stopPropagation(); onMarkForRelance(c.id); }}
+                            >
+                                Forcer en Relance
+                            </Button>
+                        )}
+                        {!relanceInfo && c.status === COMMERCIAL_STATUS.RELANCE && (
+                            <Button
+                                variant="secondary"
+                                className="w-full text-xs py-1.5 h-auto rounded-lg shadow-sm bg-green-100/50 text-green-700 hover:bg-green-100 border-none font-bold"
+                                icon={CheckCircle2}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onMarkAsSigned(c.id);
+                                    onClick(c.id);
+                                }}
+                            >
+                                Gagné / Signé
+                            </Button>
+                        )}
+                        {c.status === COMMERCIAL_STATUS.SIGNED && (
+                            <div className="w-full text-xs py-1.5 text-center font-bold text-green-600 bg-green-50 rounded-lg flex justify-center items-center gap-1">
+                                <CheckCircle2 size={14} /> Signé
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-1 border-l border-slate-200 dark:border-slate-700 pl-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={(e) => { e.stopPropagation(); onDuplicate(c.id); }} className="p-1 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-md transition-colors" title="Dupliquer"><Copy size={16} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); onDelete(c.id); }} className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors" title="Supprimer"><Trash2 size={16} /></button>
+                    </div>
                 </div>
             </div>
 
