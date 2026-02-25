@@ -79,6 +79,105 @@ export const SendQuoteAdminModal = ({ file, chantierId, onClose, onSuccess }) =>
         parseFile();
     }, [file, chantier]);
 
+    const handleSaveLocal = async () => {
+        if (!devis || !client) {
+            setError("Les champs N° Devis et Client sont obligatoires pour un simple enregistrement.");
+            return;
+        }
+
+        setSending(true);
+        setError(null);
+
+        try {
+            // 1. Init Google Auth & getToken
+            await initCalendarClient();
+            await ensureValidToken();
+            const tokenResponse = window.gapi.client.getToken();
+            const token = tokenResponse.access_token;
+
+            // 2. Upload to Drive directly
+            const metadata = {
+                name: file.name,
+                parents: ['1TslssfhTFaJ_I2-Hr2mqgtT8a7plnXZCt9_K00Zc8Nur6kjnEr8zJlC5nc8vSz-wZoBML0jb'], // Dossier devis
+                mimeType: 'application/pdf',
+            };
+            const form = new FormData();
+            form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+            form.append('file', file, file.name);
+
+            const uploadResp = await fetch(
+                'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',
+                {
+                    method: 'POST',
+                    headers: { Authorization: 'Bearer ' + token },
+                    body: form,
+                }
+            );
+
+            if (!uploadResp.ok) {
+                const errTxt = await uploadResp.text();
+                throw new Error("Erreur upload Drive: " + uploadResp.status + " " + errTxt);
+            }
+            const driveData = await uploadResp.json();
+            const fileId = driveData.id;
+            const driveUrlResult = driveData.webViewLink;
+
+            // 3. Update File Permissions
+            await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+                method: 'POST',
+                headers: {
+                    Authorization: 'Bearer ' + token,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ role: 'reader', type: 'anyone' }),
+            });
+
+            // 4. Save the file in local DB (IndexedDB) and update Chantier
+            const localFileId = crypto.randomUUID();
+            await DB.storeFile(localFileId, file);
+
+            const newAttachments = [...(chantier.attachments || []), {
+                id: localFileId,
+                name: file.name,
+                type: file.type,
+                date: new Date().toISOString(),
+                driveFileId: fileId,
+                driveUrl: driveUrlResult
+            }];
+
+            let newNotes = chantier.notes || '';
+            if (!newNotes.includes(devis)) {
+                newNotes = newNotes ? `${newNotes}\nDevis N° ${devis}` : `Devis N° ${devis}`;
+            }
+
+            updateChantier(chantier.id, {
+                extractedQuoteNumber: devis,
+                tvaReduced: tvaReduced,
+                montantTTC: parseFloat(total) || chantier.montantTTC,
+                client: client,
+                email: email,
+                adresse: address,
+                notes: newNotes,
+                attachments: newAttachments,
+                // Status not changed, just attach locally and on drive
+                updatedAt: new Date().toISOString()
+            });
+
+            setSuccess({ type: 'local', message: 'Devis sauvegardé sur Drive sans email !' });
+
+            setTimeout(() => {
+                if (onSuccess) onSuccess();
+                onClose();
+            }, 2000);
+
+        } catch (err) {
+            console.error("Erreur enregistrement Drive local", err);
+            setError(err.message);
+        } finally {
+            setSending(false);
+        }
+    };
+
     const handleSend = async () => {
         if (!devis || !client || !email) {
             setError("Les champs N° Devis, Client et Email sont obligatoires.");
@@ -167,7 +266,9 @@ export const SendQuoteAdminModal = ({ file, chantierId, onClose, onSuccess }) =>
                     id: localFileId,
                     name: file.name,
                     type: file.type,
-                    date: new Date().toISOString()
+                    date: new Date().toISOString(),
+                    driveFileId: fileId,
+                    driveUrl: driveUrlResult
                 }];
 
                 let newNotes = chantier.notes || '';
@@ -188,7 +289,7 @@ export const SendQuoteAdminModal = ({ file, chantierId, onClose, onSuccess }) =>
                     updatedAt: new Date().toISOString()
                 });
 
-                setSuccess(true);
+                setSuccess({ type: 'remote', message: 'Devis envoyé avec succès !' });
                 setDriveUrl(driveUrlResult);
 
                 // Let the UI breathe, then alert success or auto-close
@@ -224,11 +325,13 @@ export const SendQuoteAdminModal = ({ file, chantierId, onClose, onSuccess }) =>
                     <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-4">
                         <CheckCircle2 size={32} />
                     </div>
-                    <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-2">Devis envoyé avec succès !</h3>
+                    <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-2">{success.message}</h3>
                     <p className="text-sm text-slate-500 max-w-sm mb-6">
-                        Le PDF est sur Drive, la ligne est dans le Sheet interne et le mail de demande de signature a été envoyé au client.
+                        {success.type === 'local'
+                            ? "Le devis a bien été rattaché à ce dossier."
+                            : "Le PDF est sur Drive, la ligne est dans le Sheet interne et le mail de demande de signature a été envoyé au client."}
                     </p>
-                    {driveUrl && (
+                    {success.type === 'remote' && driveUrl && (
                         <a href={driveUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-brand-600 hover:text-brand-700 underline">
                             Voir le PDF sur Google Drive
                         </a>
@@ -323,12 +426,20 @@ export const SendQuoteAdminModal = ({ file, chantierId, onClose, onSuccess }) =>
 
                     <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 p-3 rounded-lg text-xs flex items-center gap-2 mt-2">
                         <Loader2 size={14} className="text-blue-500" />
-                        <span>Le PDF sera uploadé automatiquement sur Google Drive</span>
+                        <span>Le PDF sera uploadé automatiquement sur Google Drive si vous choisissez d'envoyer au client.</span>
                     </div>
 
-                    <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex flex-col sm:flex-row justify-end gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
                         <Button variant="secondary" onClick={onClose} disabled={sending}>
                             Annuler
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            onClick={handleSaveLocal}
+                            disabled={sending}
+                            className="text-brand-600 border-brand-200 hover:bg-brand-50"
+                        >
+                            Uploader sur Drive (sans email)
                         </Button>
                         <Button
                             variant="primary"
@@ -338,7 +449,7 @@ export const SendQuoteAdminModal = ({ file, chantierId, onClose, onSuccess }) =>
                             icon={Send}
                             className={sending ? 'opacity-80' : ''}
                         >
-                            {sending ? 'Envoi en cours...' : 'Envoyer vers Sheet + Mail'}
+                            Envoyer vers Sheet + Mail
                         </Button>
                     </div>
 

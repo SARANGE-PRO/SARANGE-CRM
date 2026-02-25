@@ -185,12 +185,22 @@ export const CommercialModule = ({
 
             // If it's an email action, call the webhook
             if (actionType === 'email' || actionType === 'email_archive') {
+                // Extract the driveFileId if available (we take the first one found, assuming the quote PDF is the most recent or the only one)
+                let driveFileId = '';
+                if (chantier.attachments && chantier.attachments.length > 0) {
+                    const pdfAttach = chantier.attachments.filter(a => a.type === 'application/pdf' && a.driveFileId);
+                    if (pdfAttach.length > 0) {
+                        driveFileId = pdfAttach[pdfAttach.length - 1].driveFileId; // latest pdf
+                    }
+                }
+
                 // Show some feedback (could be a toast in a fuller app, here we rely on the card updating)
                 const payload = {
                     action: 'relance_devis',
                     devis: chantier.extractedQuoteNumber || '',
                     client: chantier.client || '',
                     email: chantier.email || '',
+                    fileId: driveFileId,
                     relanceLevel: level
                 };
 
@@ -344,11 +354,11 @@ export const CommercialModule = ({
 
             {/* SCROLLABLE COLUMNS WRAPPER (Like DashboardView) */}
             <main className="flex-1 min-h-0 overflow-y-auto pb-40 md:pb-0 w-full mx-auto bg-slate-50 dark:bg-slate-900">
-                <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-4 gap-6 h-auto md:h-full px-4 md:px-6 md:pt-6 pb-0 w-full mx-auto">
+                <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-4 gap-6 h-auto px-4 md:px-6 md:pt-6 pb-6 w-full mx-auto">
                     {columns.map(col => (
                         <div
                             key={col.id}
-                            className={`flex flex-col h-auto md:h-full rounded-2xl border ${col.border}/60 ${col.color} ${mobileTab === col.id ? 'block' : 'hidden md:flex'}`}
+                            className={`flex flex-col h-full rounded-2xl border ${col.border}/60 ${col.color} ${mobileTab === col.id ? 'block' : 'hidden md:flex'}`}
                             onDragOver={handleDragOver}
                             onDrop={(e) => handleDrop(e, col.id)}
                         >
@@ -363,8 +373,8 @@ export const CommercialModule = ({
                                 </h3>
                             </div>
 
-                            {/* Column Cards (Scrollable independently on PC, flow naturally on Mobile) */}
-                            <div className="flex-1 md:overflow-y-auto overscroll-contain md:p-3 pb-0 md:pb-32 space-y-3 custom-scrollbar">
+                            {/* Column Cards (Flow naturally on PC and Mobile) */}
+                            <div className="flex-1 md:p-3 pb-0 md:pb-6 space-y-3">
                                 {col.items.length === 0 ? (
                                     <div className="h-24 md:h-full flex items-center justify-center border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-slate-400 dark:text-slate-500 text-sm font-medium">
                                         Vide

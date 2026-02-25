@@ -33,7 +33,7 @@ export const Sidebar = ({ currentView, onNavigate, onClose }) => {
                             </linearGradient>
                         </defs>
                         <text x="0" y="45" fontFamily="'Inter', sans-serif" fontWeight="900" fontSize="48" fill="url(#textGradDark)" letterSpacing="-0.05em">SARANGE</text>
-                        <circle cx="232" cy="38" r="5" fill="#F97316" />
+                        <circle cx="232" cy="40" r="5" fill="#F97316" />
                     </svg>
                 </div>
                 {onClose && (

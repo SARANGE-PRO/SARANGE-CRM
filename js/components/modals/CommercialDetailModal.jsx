@@ -12,6 +12,7 @@ import { useApp } from "../../context.js";
 import { COMMERCIAL_STATUS } from "../../utils.js";
 import { DB } from "../../db.js";
 import { SendQuoteAdminModal } from "./SendQuoteAdminModal.jsx";
+import QuoteParserService from "../../services/QuoteParserService.js";
 
 export const CommercialDetailModal = ({ chantierId, onClose }) => {
     const { state, updateChantier, deleteChantier, promoteLeadToSent, markForRelance, markAsSigned } = useApp();
@@ -40,7 +41,7 @@ export const CommercialDetailModal = ({ chantierId, onClose }) => {
             adresse: c.adresse,
             montantTTC: c.montantTTC,
             notes: c.notes,
-            dateEnvoiDevis: c.dateEnvoiDevis,
+            dateEnvoi: c.dateEnvoi,
             updatedAt: new Date().toISOString()
         });
         onClose();
@@ -133,6 +134,31 @@ export const CommercialDetailModal = ({ chantierId, onClose }) => {
         if (window.confirm("Êtes-vous sûr de vouloir supprimer ce dossier ?")) {
             deleteChantier(c.id);
             onClose();
+        }
+    };
+
+    const handleSendSavedQuote = async () => {
+        const pdfs = (c.attachments || []).filter(a => a.type === 'application/pdf');
+        if (pdfs.length === 0) {
+            alert("Aucun devis PDF enregistré.");
+            return;
+        }
+
+        // Take the latest PDF
+        pdfs.sort((a, b) => new Date(b.date) - new Date(a.date));
+        const latestPdf = pdfs[0];
+
+        try {
+            const blob = await DB.getFile(latestPdf.id);
+            if (!blob) {
+                alert("Fichier introuvable sur l'appareil local. Veuillez importer de nouveau le fichier.");
+                return;
+            }
+            const file = new File([blob], latestPdf.name, { type: 'application/pdf' });
+            setPendingQuoteFile(file);
+        } catch (err) {
+            console.error("Erreur lecture PDF local", err);
+            alert("Impossible de lire le fichier PDF local.");
         }
     };
 
@@ -326,8 +352,11 @@ export const CommercialDetailModal = ({ chantierId, onClose }) => {
                                     </label>
                                     <input
                                         type="date"
-                                        value={c.dateEnvoiDevis ? c.dateEnvoiDevis.substring(0, 10) : ''}
-                                        onChange={e => setC({ ...c, dateEnvoiDevis: new Date(e.target.value).toISOString() })}
+                                        value={c.dateEnvoi ? c.dateEnvoi.substring(0, 10) : ''}
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            setC({ ...c, dateEnvoi: val ? new Date(val).toISOString() : null });
+                                        }}
                                         className="w-full p-2 text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 dark:text-slate-300"
                                     />
                                     <p className="text-[10px] text-slate-500 mt-1.5 leading-tight">
@@ -372,14 +401,26 @@ export const CommercialDetailModal = ({ chantierId, onClose }) => {
                                 </h4>
                                 <div className="flex flex-col gap-2">
                                     {c.status === COMMERCIAL_STATUS.LEAD && (
-                                        <Button
-                                            variant="primary"
-                                            className="w-full text-sm"
-                                            icon={Send}
-                                            onClick={() => promoteLeadToSent(c.id, c.montantTTC)}
-                                        >
-                                            Passer en "Devis Envoyé" (Manuel)
-                                        </Button>
+                                        <div className="flex flex-col gap-2">
+                                            {c.attachments?.some(a => a.type === 'application/pdf') && (
+                                                <Button
+                                                    variant="primary"
+                                                    className="w-full text-sm shadow-sm"
+                                                    icon={Send}
+                                                    onClick={handleSendSavedQuote}
+                                                >
+                                                    Envoyer le devis (Email + Drive)
+                                                </Button>
+                                            )}
+                                            <Button
+                                                variant={c.attachments?.some(a => a.type === 'application/pdf') ? "secondary" : "primary"}
+                                                className="w-full text-sm"
+                                                icon={Send}
+                                                onClick={() => promoteLeadToSent(c.id, c.montantTTC)}
+                                            >
+                                                Passer en "Devis Envoyé" (Manuel)
+                                            </Button>
+                                        </div>
                                     )}
                                     {c.status === COMMERCIAL_STATUS.SENT && (
                                         <Button

@@ -57,7 +57,7 @@ export const CommercialCard = ({
     const getRelanceInfo = () => {
         if (c.status !== COMMERCIAL_STATUS.SENT && c.status !== COMMERCIAL_STATUS.RELANCE) return null;
 
-        const dateRepere = new Date(c.dateEnvoiDevis || c.updatedAt);
+        const dateRepere = new Date(c.dateEnvoi || c.updatedAt);
         const diffTime = Math.abs(new Date() - dateRepere);
         const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
         const level = c.relanceLevel || 0;
