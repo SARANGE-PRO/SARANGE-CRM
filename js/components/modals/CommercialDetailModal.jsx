@@ -13,6 +13,7 @@ import { COMMERCIAL_STATUS } from "../../utils.js";
 import { DB } from "../../db.js";
 import { SendQuoteAdminModal } from "./SendQuoteAdminModal.jsx";
 import QuoteParserService from "../../services/QuoteParserService.js";
+import { RapportMetrageViewer } from '../RapportMetrageViewer.jsx';
 
 export const CommercialDetailModal = ({ chantierId, onClose }) => {
     const { state, updateChantier, deleteChantier, promoteLeadToSent, markForRelance, markAsSigned } = useApp();
@@ -190,6 +191,27 @@ export const CommercialDetailModal = ({ chantierId, onClose }) => {
             {/* Modal Principale */}
             <Modal isOpen={!pendingQuoteFile} onClose={onClose} title="Détails du Dossier Commercial" size="lg">
                 <div className="flex flex-col gap-5 md:flex-row md:gap-6">
+
+                    {/* BANNIÈRE RETOUR COMMERCIAL (si motifRetour) */}
+                    {c.motifRetour && (
+                        <div className="w-full md:col-span-2 flex flex-col gap-4">
+                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-xl p-4 flex gap-3">
+                                <div className="bg-amber-100 dark:bg-amber-800 p-2 rounded-lg shrink-0 h-fit"><ArrowRight className="text-amber-600 dark:text-amber-300 rotate-180" size={18} /></div>
+                                <div>
+                                    <p className="font-bold text-amber-800 dark:text-amber-200 text-sm">↩ Retour du Métrage</p>
+                                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">Motif : <strong>{c.motifRetour}</strong></p>
+                                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Consultez le rapport ci-dessous pour ajuster le devis.</p>
+                                </div>
+                            </div>
+                            {(c.rapportMetrage || c.rapportMetrageFileId) && (
+                                <RapportMetrageViewer
+                                    rapportMetrage={c.rapportMetrage}
+                                    rapportMetrageFileId={c.rapportMetrageFileId}
+                                    title="Rapport de Métrage — Cotes terrain"
+                                />
+                            )}
+                        </div>
+                    )}
 
                     {/* ══════════════ COLONNE GAUCHE : INFOS ══════════════ */}
                     <div className="flex-1 flex flex-col gap-4">
@@ -470,8 +492,8 @@ export const CommercialDetailModal = ({ chantierId, onClose }) => {
                                             <div className="flex items-center gap-3">
                                                 <div className="bg-white/20 p-2 rounded-full shrink-0"><MapPin size={17} /></div>
                                                 <div className="text-left">
-                                                    <p className="font-bold text-white text-sm">Bureau d'Études</p>
-                                                    <p className="text-xs text-green-100 font-normal">Un métreur doit se rendre sur place avant fabrication.</p>
+                                                    <p className="font-bold text-white text-sm">Envoyer en Métrage</p>
+                                                    <p className="text-xs text-green-100 font-normal">Un métreur doit se rendre sur place pour prendre les cotes.</p>
                                                 </div>
                                             </div>
                                         </Button>
@@ -479,13 +501,13 @@ export const CommercialDetailModal = ({ chantierId, onClose }) => {
                                         <Button
                                             variant="secondary"
                                             className="w-full justify-start h-auto py-3 px-4 bg-white border-slate-200 dark:border-slate-600"
-                                            onClick={() => { updateChantier(c.id, { assignation: 'ATELIER' }); onClose(); }}
+                                            onClick={() => { updateChantier(c.id, { assignation: 'METHODES' }); onClose(); }}
                                         >
                                             <div className="flex items-center gap-3">
                                                 <div className="bg-slate-100 dark:bg-slate-800 p-2 rounded-full shrink-0"><Truck size={17} className="text-slate-500" /></div>
                                                 <div className="text-left">
-                                                    <p className="font-bold text-slate-700 dark:text-slate-200 text-sm">Directement à l'Atelier</p>
-                                                    <p className="text-xs text-slate-500 font-normal">Métrage déjà fourni. Prêt pour la fabrication.</p>
+                                                    <p className="font-bold text-slate-700 dark:text-slate-200 text-sm">Envoyer aux Méthodes</p>
+                                                    <p className="text-xs text-slate-500 font-normal">Les cotes sont déjà fournies. Prêt pour l'édition des fiches fab.</p>
                                                 </div>
                                             </div>
                                         </Button>

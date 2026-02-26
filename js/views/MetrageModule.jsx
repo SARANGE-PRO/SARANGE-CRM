@@ -1,6 +1,6 @@
 import React, { useState, Suspense } from 'react';
 import { Spinner } from "../components/ui/Spinner.jsx";
-import { Cloud, CloudOff, AlertCircle, Menu, Sun, Moon, Archive, Trash2, Settings } from 'lucide-react';
+import { Cloud, CloudOff, AlertCircle, Menu, Sun, Moon, Archive, Trash2, Settings, PencilRuler } from 'lucide-react';
 import { useApp } from "../context.js";
 
 // Import existing views that are now under MetrageModule
@@ -38,7 +38,10 @@ export const MetrageModule = ({
             {/* Module Header / Tabs and Utilities */}
             <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 pt-[max(1rem,env(safe-area-inset-top))] px-4 md:px-6 flex-shrink-0 shadow-sm z-20">
                 <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-xl font-bold text-slate-800 dark:text-white">Bureau d'Études</h2>
+                    <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                        <PencilRuler size={22} className="text-brand-600" />
+                        Métrage Technique
+                    </h2>
 
                     {/* RIGHT ACTIONS (From AppHeader) */}
                     <div className="flex gap-2 relative">

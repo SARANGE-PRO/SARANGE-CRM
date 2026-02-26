@@ -14,6 +14,7 @@ import { ProductEditor } from "../components/ProductEditor.jsx";
 import { EditChantierModal } from "../components/EditChantierModal.jsx";
 import { QuoteImportModal } from "./QuoteImportModal.jsx";
 import { PDFViewerModal } from "../components/PDFViewerModal.jsx";
+import { RetourCommercialModal } from "../components/modals/RetourCommercialModal.jsx";
 import { generateUUID, buildOptionsString, getChantierStep } from "../utils.js";
 
 // Mapping Centralisé Sarange Parser V5 -> App Types
@@ -212,13 +213,29 @@ const ConfirmSendModal = ({ chantier, products, incompleteCount, onClose, onStat
         const result = await sendToGoogleSheets(chantier, products, htmlReport, onStatusChange);
 
         if (result.success) {
+            // Stocker le rapport métrage (hybrid: inline si <50KB, IndexedDB sinon)
+            const rapportUpdates = {};
+            const htmlSize = new Blob([htmlReport]).size;
+            if (htmlSize > 50000) {
+                // Lourd (photos Base64) → IndexedDB + Drive later
+                const fileId = chantier.id + '_rapport';
+                try {
+                    await DB.storeFile(fileId, new Blob([htmlReport], { type: 'text/html' }));
+                    rapportUpdates.rapportMetrageFileId = fileId;
+                    rapportUpdates.rapportMetrage = null;
+                } catch (e) {
+                    console.warn('Fallback: stockage inline', e);
+                    rapportUpdates.rapportMetrage = htmlReport;
+                }
+            } else {
+                rapportUpdates.rapportMetrage = htmlReport;
+            }
+            rapportUpdates.assignation = 'METHODES';
+            onStatusChange?.(rapportUpdates);
+
             setIsSending(false);
             setIsSuccess(true);
-
-            // Animation de succès visible pendant 1.5s avant de fermer
-            setTimeout(() => {
-                onSuccess?.();
-            }, 1500);
+            setTimeout(() => { onSuccess?.(); }, 1500);
         } else {
             setIsSending(false);
             onError?.(result.error);
@@ -399,6 +416,7 @@ export const ChantierDetailView = () => {
     const { state, selectChantier, deleteProduct, saveProduct, updateChantier, updateChantierDate, navigate, setReturnView } = useApp();
     const [edt, setEdt] = useState(null);
     const [showConfirm, setShowConfirm] = useState(false);
+    const [showRetour, setShowRetour] = useState(false);
     const [showUnlock, setShowUnlock] = useState(false);
     const [showImport, setShowImport] = useState(false);
     const [pdfUrl, setPdfUrl] = useState(null);
@@ -1069,22 +1087,29 @@ export const ChantierDetailView = () => {
                             <p className="text-[10px] uppercase tracking-widest text-slate-400 mt-2 font-bold">Action requise avant envoi</p>
                         </div>
                     )}
-                    <Button
-                        onClick={() => {
-                            if (hasUnverified) {
-                                setShowUnverifiedWarning(true);
-                            } else {
-                                setShowConfirm(true);
-                            }
-                        }}
-                        disabled={isSending}
-                        className={`w-full py-4 text-base font-bold transition-all duration-300 shadow-lg ${hasUnverified && showUnverifiedWarning ? 'ring-2 ring-amber-500' : 'bg-brand-600 hover:bg-brand-700 active:scale-[0.98]'}`}
-                        icon={isSending ? null : Send}
-                    >
-                        {isSending ? (
-                            <span className="flex items-center justify-center gap-3"><Spinner size={20} />Transmission...</span>
-                        ) : 'ENVOYER AU BUREAU'}
-                    </Button>
+                    <div className="flex gap-3">
+                        <Button
+                            onClick={() => setShowRetour(true)}
+                            disabled={isSending}
+                            variant="secondary"
+                            className="flex-1 py-4 text-sm font-bold !bg-amber-50 !text-amber-700 hover:!bg-amber-100 border-amber-200 dark:!bg-amber-900/20 dark:!text-amber-300 dark:border-amber-800"
+                        >
+                            ↩ Retour Commercial
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                if (hasUnverified) { setShowUnverifiedWarning(true); }
+                                else { setShowConfirm(true); }
+                            }}
+                            disabled={isSending}
+                            className={`flex-[2] py-4 text-sm font-bold transition-all duration-300 shadow-lg ${hasUnverified && showUnverifiedWarning ? 'ring-2 ring-amber-500' : 'bg-brand-600 hover:bg-brand-700 active:scale-[0.98]'}`}
+                            icon={isSending ? null : Send}
+                        >
+                            {isSending ? (
+                                <span className="flex items-center justify-center gap-3"><Spinner size={20} />Transmission...</span>
+                            ) : '✅ Valider Métrage'}
+                        </Button>
+                    </div>
                 </div>
             )}
 
@@ -1099,6 +1124,19 @@ export const ChantierDetailView = () => {
 
             {/* Modals */}
             {showConfirm && <ConfirmSendModal chantier={ch} products={prds} incompleteCount={incompleteCount} onClose={() => setShowConfirm(false)} onStatusChange={handleStatusChange} onSuccess={handleSendSuccess} onError={handleSendError} />}
+            {showRetour && <RetourCommercialModal isOpen={true} clientName={ch.client} onClose={() => setShowRetour(false)} onConfirm={async (motif) => {
+                const htmlReport = generateReportHTML(ch, prds, new Date().toISOString());
+                const rapportUpdates = { motifRetour: motif, assignation: 'COMMERCIAL' };
+                const htmlSize = new Blob([htmlReport]).size;
+                if (htmlSize > 50000) {
+                    const fileId = ch.id + '_rapport';
+                    try { await DB.storeFile(fileId, new Blob([htmlReport], { type: 'text/html' })); rapportUpdates.rapportMetrageFileId = fileId; rapportUpdates.rapportMetrage = null; }
+                    catch (e) { rapportUpdates.rapportMetrage = htmlReport; }
+                } else { rapportUpdates.rapportMetrage = htmlReport; }
+                updateChantier(ch.id, rapportUpdates);
+                setShowRetour(false);
+                setToast({ message: `↩ Dossier retourné au commercial (${motif})`, type: 'info' });
+            }} />}
             {showUnlock && <UnlockModal onClose={() => setShowUnlock(false)} onUnlock={handleUnlock} />}
             {showImport && <QuoteImportModal onClose={() => setShowImport(false)} onImport={handleImport} />}
             {ied && <EditChantierModal chantier={ch} onClose={() => setIed(false)} onUpdate={d => updateChantier(ch.id, d)} />}

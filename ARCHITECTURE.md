@@ -2,8 +2,8 @@
 
 # 🏗️ Architecture & Documentation Technique - SarangePro
 
-> **Version** : 2.1.0
-> **Dernière mise à jour** : 2026-02-11
+> **Version** : 2.3.0
+> **Dernière mise à jour** : 2026-02-26
 > **Statut** : REFERENCE_ABSOLUE
 
 Ce document est la **source de vérité technique** pour le projet SarangePro. Toute modification du code doit respecter les principes, schémas et architectures décrits ci-dessous.
@@ -98,11 +98,12 @@ Les données sont stockées sous forme d'objets JSON dans **IndexedDB** (local) 
 > * **Données Métier (JSON)** : Sync bidirectionnelle Firebase/IndexedDB.
 > * **Fichiers Lourds (PDF)** : Stockage **LOCAL** dans IndexedDB (Store `files`) + **CLOUD** Google Drive pour partage multi-utilisateurs.
 
-> **Nouveauté v2.2 (Google Drive Sync)** :
+> **Nouveauté v2.2 & 2.3 (Google Drive Sync & Attachements)** :
 >
 > * **Devis PDF** : Auto-upload vers Google Drive (`SarangePro/[Client]/`) lors de l'import.
+> * **Pièces Jointes CRM** : Les photos, plans d'architectes et autres documents peuvent être attachés manuellement depuis la `CommercialDetailModal`. Ils sont stockés localement (IndexedDB `files`) avec des métadonnées dans le modèle.
 > * **Partage Multi-Users** : Tous les utilisateurs (bureau + terrain) voient les mêmes devis via Drive API.
-> * **Stockage Dual** : Local (IndexedDB) + Cloud (Drive) pour robustesse offline/online.
+> * **UX Mobile SaaS** : Gestuelle Swipe native pour la sidebar, suppression des burgers redondants, indications "Peek" et "Pill", et Kanban mobile en "Tableau Empilé".
 
 ### 🏠 `Chantier` (Dossier Client)
 
@@ -132,7 +133,7 @@ Les données sont stockées sous forme d'objets JSON dans **IndexedDB** (local) 
 | `history` | `object[]` | ❌ | Traceabilité. `{ date: ISO, action: 'UNLOCK', reason: string, details?: string, user: string }` |
 | `quoteFileId` | `UUID` | ❌ | ID du fichier PDF stocké dans le store local `files`. |
 | `quoteFileName` | `string` | ❌ | Nom du fichier original. |
-| `attachments` | `object[]` | ❌ | Fichiers annexes: `[{ id: UUID, name: string, type: string, date: ISO8601 }]`. Binaires dans le store `files`. |
+| `attachments` | `object[]` | ❌ | Pièces jointes (Photos, Plans): `[{ id: UUID, fileId: UUID, name: string, type: 'IMAGE'|'PDF'|'OTHER', size: number, date: ISO8601 }]`. Binaires dans `files`. |
 | `referenceDevis` | `string` | ❌ | Numéro de devis extrait (ex: "12345"). |
 | `notes` | `string` | ❌ | Infos supplémentaires (Code d'accès, etc.). Synchro GCal. |
 
@@ -363,15 +364,22 @@ Tous les nouveaux écrans DOIVENT utiliser ces composants pour garantir l'unifor
 * **`<SelectToggle>`** : Sélecteur exclusif (Pill tabs) remplaçant les `<select>` natifs pour une meilleure UX mobile.
 * **`<Modal>`** : Fenêtre modale avec backdrop blur et animation.
 
-### 📱 UX Mobile-First
+### 📱 UX Mobile-First (v2.3)
 
-* **Safe Areas** : Utiliser la classe `.safe-pb` pour éviter que le contenu ne soit caché par la barre de geste iOS.
-* **Touch Targets** : Tous les éléments cliquables doivent faire au moins `44px` de hauteur.
-* **Inputs** : Utiliser `inputMode="decimal"` pour les dimensions pour ouvrir le pavé numérique direct.
+* **Safe Areas** : 
+  * Header/Sidebar: `pt-[calc(max(1rem,env(safe-area-inset-top))+8px)]` pour éviter que le contenu ne soit caché par le *Dynamic Island* ou l'Encorche iOS.
+* **Touch Targets** : Tous les éléments cliquables doivent faire au moins `44px` de hauteur (`min-h-[44px] min-w-[44px]`).
+* **Menu Principal par "Swipe"** :
+  * Le vieux bouton "Burger gauche" général a été supprimé.
+  * Ouverture de la barre latérale uniquement par un mouvement de tirage "Swipe" depuis le bord de l'écran (0 > 20px).
+* **Discoverability de la Gestuelle "Swipe"** :
+  * **La Pilule (Pill) :** Un bloc vertical gris de 5x56px transparent sur la gauche de l'écran permet aux non-initiés d'avoir une zone de clic/swipe visible. Elle disparaît pour la vie de l'utilisateur (via `localStorage`) dès la première ouverture réussie.
+  * **Le Tiroir Actif (Peek) :** Au tout premier chargement du site de la vie du Mobile, le menu latéral sort tout seul de 40px et se referme en `ease-out` après 800ms pour éduquer l'utilisateur de l'existence d'un tiroir coulissant gauche.
+* **Kanban Mobile** : Passage du format "Table" vers le "Stacked Layout" (Tuiles empilées) qui condense les libellés (`Leads`, `Envoyés`, etc.) en évitant les répétitions redondantes de titres.
 * **Full Screen Layouts (Mobile)** : Privilégier la stratégie `fixed inset-0` avec `overflow-hidden`.
 * **Z-Index Layering** :
   * `z-30` : Headers Sticky.
-  * `z-40` : Floated Elements (ex: Boutons d'action).
+  * `z-40` : Floated Elements (ex: Pilule d'amorce Swipe, Boutons d'action).
   * `z-50` : Navigation Apps & Modales Fullscreen.
 
 ---

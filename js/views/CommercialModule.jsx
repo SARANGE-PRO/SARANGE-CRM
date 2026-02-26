@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Plus, GripVertical, Cloud, CloudOff, AlertCircle, Menu, Sun, Moon, Archive, Trash2, Settings, Search } from 'lucide-react';
+import { Plus, GripVertical, Cloud, CloudOff, AlertCircle, Menu, Sun, Moon, Archive, Trash2, Settings, Search, Briefcase } from 'lucide-react';
 import { Button } from "../components/ui/Button.jsx";
 import { CommercialCard } from "../components/CommercialCard.jsx";
 import { NewLeadModal } from "../components/NewLeadModal.jsx";
@@ -261,7 +261,10 @@ export const CommercialModule = ({
 
             {/* Header */}
             <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-4 flex-shrink-0 flex items-center shadow-sm z-20">
-                <h2 className="text-xl font-bold text-slate-800 dark:text-white mr-auto">Commercial</h2>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white mr-auto flex items-center gap-2">
+                    <Briefcase size={22} className="text-brand-600" />
+                    Commercial
+                </h2>
 
                 {/* RIGHT ACTIONS (From AppHeader) */}
                 <div className="flex gap-2 relative">

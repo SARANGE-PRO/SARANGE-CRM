@@ -3,6 +3,7 @@ import {
     LayoutDashboard,
     Briefcase,
     PencilRuler,
+    ClipboardList,
     Factory,
     Package,
     Truck,
@@ -14,9 +15,10 @@ export const Sidebar = ({ currentView, onNavigate, onClose }) => {
     const navItems = [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'commercial', label: 'Commercial', icon: Briefcase },
-        { id: 'metrage', label: "Bureau d'Études", icon: PencilRuler },
+        { id: 'metrage', label: 'Métrage Technique', icon: PencilRuler },
+        { id: 'methodes', label: 'Méthodes', icon: ClipboardList },
         { id: 'atelier', label: 'Atelier & Fab', icon: Factory },
-        { id: 'stocks', label: 'Stocks', icon: Package },
+        { id: 'stocks', label: 'Stock & Achat', icon: Package },
         { id: 'terrain', label: 'Planning & Pose', icon: Truck },
         { id: 'finances', label: 'Facturation', icon: CreditCard }
     ];

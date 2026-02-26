@@ -21,6 +21,9 @@ const CommercialModule = React.lazy(() => import("./views/CommercialModule.jsx")
 const ChantierDetailView = React.lazy(() => import("./views/ChantierDetailView.jsx").then(m => ({ default: m.ChantierDetailView })));
 const SettingsView = React.lazy(() => import("./views/SettingsView.jsx").then(m => ({ default: m.SettingsView })));
 const TrashView = React.lazy(() => import("./views/TrashView.jsx").then(m => ({ default: m.TrashView })));
+const AtelierModule = React.lazy(() => import("./views/AtelierModule.jsx").then(m => ({ default: m.AtelierModule })));
+const MethodesModule = React.lazy(() => import("./views/MethodesModule.jsx").then(m => ({ default: m.MethodesModule })));
+const StockAchatModule = React.lazy(() => import("./views/StockAchatModule.jsx").then(m => ({ default: m.StockAchatModule })));
 
 // Layout
 import { Sidebar } from "./components/Sidebar.jsx";
@@ -126,7 +129,7 @@ const App = () => {
       }
       // Restore last navigation tab (calendar, map, dashboard)
       const lastTab = localStorage.getItem('sarange_last_nav_tab');
-      if (lastTab && ['dashboard', 'commercial', 'metrage', 'atelier', 'stocks', 'terrain', 'finances'].includes(lastTab)) {
+      if (lastTab && ['dashboard', 'commercial', 'metrage', 'methodes', 'atelier', 'stocks', 'terrain', 'finances'].includes(lastTab)) {
         return { view: lastTab, currentChantierId: null };
       }
     } catch (e) {
@@ -199,7 +202,7 @@ const App = () => {
     localStorage.setItem('sarange_session_v1', JSON.stringify(sessionData));
 
     // Persist last navigation tab (for main nav views only)
-    if (['dashboard', 'commercial', 'metrage', 'atelier', 'stocks', 'terrain', 'finances'].includes(view)) {
+    if (['dashboard', 'commercial', 'metrage', 'methodes', 'atelier', 'stocks', 'terrain', 'finances'].includes(view)) {
       localStorage.setItem('sarange_last_nav_tab', view);
     }
   }, [view, st.currentChantierId]);
@@ -888,14 +891,20 @@ const App = () => {
                           isOnline={isOnline}
                           firebaseConnected={firebaseConnected}
                         /> :
-                        ['dashboard', 'atelier', 'stocks', 'terrain', 'finances'].includes(view) ?
-                          <div className="flex h-full items-center justify-center p-8 bg-white dark:bg-slate-800 m-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
-                            <div className="text-center">
-                              <h2 className="text-3xl font-bold text-slate-700 dark:text-slate-300 mb-4">Module en construction...</h2>
-                              <p className="text-slate-500 dark:text-slate-400 text-lg">Cette vue de l'ERP sera bientôt disponible.</p>
-                            </div>
-                          </div> :
-                          null
+                        view === 'atelier' ?
+                          <AtelierModule /> :
+                          view === 'methodes' ?
+                            <MethodesModule /> :
+                            view === 'stocks' ?
+                              <StockAchatModule /> :
+                              ['dashboard', 'terrain', 'finances'].includes(view) ?
+                                <div className="flex h-full items-center justify-center p-8 bg-white dark:bg-slate-800 m-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+                                  <div className="text-center">
+                                    <h2 className="text-3xl font-bold text-slate-700 dark:text-slate-300 mb-4">Module en construction...</h2>
+                                    <p className="text-slate-500 dark:text-slate-400 text-lg">Cette vue de l'ERP sera bientôt disponible.</p>
+                                  </div>
+                                </div> :
+                                null
               }
             </main>
           </div>
