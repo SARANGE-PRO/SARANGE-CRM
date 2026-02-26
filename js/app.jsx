@@ -146,6 +146,11 @@ const App = () => {
   const [toast, setToast] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // --- SWIPE GESTURE LOGIC ---
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const isSwiping = useRef(false);
+
   // --- SESSION PERSISTENCE ---
   useEffect(() => {
     const sessionData = {
@@ -695,9 +700,6 @@ const App = () => {
   };
 
   // --- SWIPE GESTURE LOGIC ---
-  const touchStartX = useRef(null);
-  const touchStartY = useRef(null);
-  const isSwiping = useRef(false);
 
   const handleTouchStart = (e) => {
     // Ne détecter que le premier doigt
