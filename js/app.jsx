@@ -700,7 +700,6 @@ const App = () => {
   };
 
   // --- SWIPE GESTURE LOGIC ---
-
   const handleTouchStart = (e) => {
     // Ne détecter que le premier doigt
     if (e.touches.length > 1) return;
@@ -762,6 +761,12 @@ const App = () => {
       // Menu est fermé -> swipe DROITE (diffX positif) pour ouvrir
       if (diffX > THRESHOLD) {
         setIsMobileMenuOpen(true);
+        // Haptic feedback best-effort (Feature Detect)
+        if (navigator.vibrate) {
+          try {
+            navigator.vibrate(15);
+          } catch (e) { }
+        }
       }
     }
 
@@ -800,16 +805,10 @@ const App = () => {
               </>
             )}
             <main className="flex-1 overflow-hidden relative">
-              {/* Mobile Header Toggle (Only visible if navigation exists and we aren't in focus mode) */}
-              {!isFocusMode && (
-                <div className="md:hidden absolute top-[max(1rem,env(safe-area-inset-top))] left-2 z-30">
-                  <button
-                    onClick={() => setIsMobileMenuOpen(true)}
-                    className="flex items-center justify-center p-3 min-w-[44px] min-h-[44px] bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition-colors"
-                  >
-                    <Menu size={20} />
-                  </button>
-                </div>
+
+              {/* Swipe Edge Hint - Micro visuel glow pour indiquer le comportement natif du swipe */}
+              {!isFocusMode && !isMobileMenuOpen && (
+                <div className="md:hidden absolute top-0 left-0 bottom-0 w-2 pointer-events-none bg-gradient-to-r from-slate-900/5 to-transparent dark:from-white/5 z-20"></div>
               )}
 
               {view === 'settings' ?

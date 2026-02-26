@@ -23,7 +23,7 @@ export const Sidebar = ({ currentView, onNavigate, onClose }) => {
 
     return (
         <aside className="w-64 bg-slate-900 text-slate-300 h-screen flex flex-col flex-shrink-0 z-50">
-            <div className="p-6 flex items-center justify-between">
+            <div className="p-6 pt-[calc(max(1.5rem,env(safe-area-inset-top))+8px)] flex items-center justify-between">
                 <div className="flex-1 max-w-[160px]">
                     <svg viewBox="0 0 350 60" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto">
                         <defs>

@@ -54,10 +54,10 @@ export const CommercialModule = ({
         const signes = chantiers.filter(c => c.status === COMMERCIAL_STATUS.SIGNED);
 
         return [
-            { id: 'leads', title: 'Nouveaux Leads', items: leads, color: 'bg-slate-100 dark:bg-slate-800/50', headerColor: 'text-slate-700 dark:text-slate-300', dot: 'bg-slate-400', border: 'border-slate-200 dark:border-slate-700', ring: 'ring-slate-400' },
-            { id: 'envoyes', title: 'Devis Envoyés', items: envoyes, color: 'bg-brand-50/50 dark:bg-brand-900/10', headerColor: 'text-brand-700 dark:text-brand-300', dot: 'bg-brand-500', border: 'border-brand-100 dark:border-brand-900', ring: 'ring-brand-400' },
-            { id: 'relance', title: 'En Relance', items: enRelance, color: 'bg-rose-50/50 dark:bg-rose-900/10', headerColor: 'text-rose-700 dark:text-rose-300', dot: 'bg-rose-500', border: 'border-rose-100 dark:border-rose-900', ring: 'ring-rose-400' },
-            { id: 'signes', title: 'Gagnés / Signés', items: signes, color: 'bg-green-50/50 dark:bg-emerald-900/10', headerColor: 'text-green-700 dark:text-emerald-400', dot: 'bg-green-500', border: 'border-green-100 dark:border-green-900', ring: 'ring-green-400' }
+            { id: 'leads', title: 'Nouveaux Leads', shortTitle: 'Leads', items: leads, color: 'bg-slate-100 dark:bg-slate-800/50', headerColor: 'text-slate-700 dark:text-slate-300', dot: 'bg-slate-400', border: 'border-slate-200 dark:border-slate-700', ring: 'ring-slate-400' },
+            { id: 'envoyes', title: 'Devis Envoyés', shortTitle: 'Envoyés', items: envoyes, color: 'bg-brand-50/50 dark:bg-brand-900/10', headerColor: 'text-brand-700 dark:text-brand-300', dot: 'bg-brand-500', border: 'border-brand-100 dark:border-brand-900', ring: 'ring-brand-400' },
+            { id: 'relance', title: 'En Relance', shortTitle: 'Relances', items: enRelance, color: 'bg-rose-50/50 dark:bg-rose-900/10', headerColor: 'text-rose-700 dark:text-rose-300', dot: 'bg-rose-500', border: 'border-rose-100 dark:border-rose-900', ring: 'ring-rose-400' },
+            { id: 'signes', title: 'Gagnés / Signés', shortTitle: 'Gagnés', items: signes, color: 'bg-green-50/50 dark:bg-emerald-900/10', headerColor: 'text-green-700 dark:text-emerald-400', dot: 'bg-green-500', border: 'border-green-100 dark:border-green-900', ring: 'ring-green-400' }
         ];
     }, [chantiers]);
 
@@ -346,7 +346,7 @@ export const CommercialModule = ({
                                 ${col.color}`}
                         >
                             <div className="text-2xl font-bold">{col.items.length}</div>
-                            <div className="text-[11px] leading-tight font-bold uppercase w-full break-words">{col.title}</div>
+                            <div className="text-[11px] leading-tight font-bold uppercase w-full break-words">{col.shortTitle}</div>
                         </button>
                     ))}
                 </div>
@@ -362,8 +362,8 @@ export const CommercialModule = ({
                             onDragOver={handleDragOver}
                             onDrop={(e) => handleDrop(e, col.id)}
                         >
-                            {/* Column Header */}
-                            <div className="flex items-center justify-between mb-4 md:mb-0 md:p-4 shrink-0 border-b border-transparent md:border-slate-200/50 dark:md:border-slate-700/50">
+                            {/* Column Header (Desktop Only to remove duplicate text on Mobile) */}
+                            <div className="hidden md:flex items-center justify-between mb-4 md:mb-0 md:p-4 shrink-0 border-b border-transparent md:border-slate-200/50 dark:md:border-slate-700/50">
                                 <h3 className={`font-bold ${col.headerColor} flex items-center gap-2`}>
                                     <div className={`hidden md:block w-2.5 h-2.5 rounded-full ${col.dot}`}></div>
                                     {col.title}
@@ -374,7 +374,7 @@ export const CommercialModule = ({
                             </div>
 
                             {/* Column Cards (Flow naturally on PC and Mobile) */}
-                            <div className="flex-1 md:p-3 pb-0 md:pb-6 space-y-3">
+                            <div className="flex-1 p-0 pt-4 md:p-3 pb-0 md:pb-6 space-y-3">
                                 {col.items.length === 0 ? (
                                     <div className="h-24 md:h-full flex items-center justify-center border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-slate-400 dark:text-slate-500 text-sm font-medium">
                                         Vide
