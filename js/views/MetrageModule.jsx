@@ -38,8 +38,7 @@ export const MetrageModule = ({
             {/* Module Header / Tabs and Utilities */}
             <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 pt-[max(1rem,env(safe-area-inset-top))] px-4 md:px-6 flex-shrink-0 shadow-sm z-20">
                 <div className="flex items-center justify-between mb-2">
-                    {/* Added mr-auto pl-12 on mobile to make room for the absolute Hamburger Menu from App.jsx */}
-                    <h2 className="text-xl font-bold text-slate-800 dark:text-white pl-12 md:pl-0">Bureau d'Études</h2>
+                    <h2 className="text-xl font-bold text-slate-800 dark:text-white">Bureau d'Études</h2>
 
                     {/* RIGHT ACTIONS (From AppHeader) */}
                     <div className="flex gap-2 relative">

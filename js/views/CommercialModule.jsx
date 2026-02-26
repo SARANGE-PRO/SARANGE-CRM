@@ -260,7 +260,7 @@ export const CommercialModule = ({
             )}
 
             {/* Header */}
-            <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-4 flex-shrink-0 flex items-center shadow-sm z-20 pl-16 md:pl-6">
+            <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-4 flex-shrink-0 flex items-center shadow-sm z-20">
                 <h2 className="text-xl font-bold text-slate-800 dark:text-white mr-auto">Commercial</h2>
 
                 {/* RIGHT ACTIONS (From AppHeader) */}
