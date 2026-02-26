@@ -145,6 +145,44 @@ const App = () => {
   const [firebaseConnected, setFirebaseConnected] = useState(false);
   const [toast, setToast] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [sidebarDiscovered, setSidebarDiscovered] = useState(() => localStorage.getItem('sarange_sidebar_discovered') === '1');
+  const [isPeeking, setIsPeeking] = useState(false);
+
+  const isFocusMode = Boolean(st.currentChantierId) || ['settings', 'trash'].includes(view);
+
+  // --- SWIPE DISCOVERABILITY (PEEK & DISCOVER) ---
+  useEffect(() => {
+    if (isMobileMenuOpen && !sidebarDiscovered) {
+      localStorage.setItem('sarange_sidebar_discovered', '1');
+      setSidebarDiscovered(true);
+      setIsPeeking(false);
+    }
+  }, [isMobileMenuOpen, sidebarDiscovered]);
+
+  useEffect(() => {
+    if (boot.loading || isFocusMode || sidebarDiscovered) return;
+
+    // Check if on mobile
+    if (window.innerWidth >= 768) return;
+
+    const hasPeeked = localStorage.getItem('sarange_sidebar_peeked') === '1';
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Run the Peek animation only once
+    if (!hasPeeked && !prefersReducedMotion) {
+      localStorage.setItem('sarange_sidebar_peeked', '1');
+
+      const startTimer = setTimeout(() => {
+        setIsPeeking(true);
+        const endTimer = setTimeout(() => {
+          setIsPeeking(false);
+        }, 800);
+        return () => clearTimeout(endTimer);
+      }, 600); // Wait 600ms after boot to trigger peek
+
+      return () => clearTimeout(startTimer);
+    }
+  }, [boot.loading, isFocusMode, sidebarDiscovered]);
 
   // --- SWIPE GESTURE LOGIC ---
   const touchStartX = useRef(null);
@@ -691,8 +729,6 @@ const App = () => {
   // Fallback component
   const LoadingScreen = () => <div className="h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900"><Spinner size={40} className="text-brand-600" /></div>;
 
-  const isFocusMode = Boolean(st.currentChantierId) || ['settings', 'trash'].includes(view);
-
   // Helper to ensure Sidebar closes on navigation in mobile
   const handleNavigate = (newView) => {
     setView(newView);
@@ -701,6 +737,8 @@ const App = () => {
 
   // --- SWIPE GESTURE LOGIC ---
   const handleTouchStart = (e) => {
+    if (isPeeking) setIsPeeking(false); // Cancel peek animation immediately if user interacts
+
     // Ne détecter que le premier doigt
     if (e.touches.length > 1) return;
 
@@ -796,19 +834,28 @@ const App = () => {
                   />
                 )}
                 {/* Sidebar Container */}
-                <div className={`
-                  fixed md:static inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-out
-                  ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-                `}>
+                <div
+                  className={`
+                    fixed md:static inset-y-0 left-0 z-50 transform ease-out
+                    ${isPeeking ? 'duration-700' : 'transition-transform duration-300'}
+                    ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+                  `}
+                  style={isPeeking ? { transform: 'translateX(calc(-100% + 40px))' } : {}}
+                >
                   <Sidebar currentView={view} onNavigate={handleNavigate} onClose={() => setIsMobileMenuOpen(false)} />
                 </div>
               </>
             )}
             <main className="flex-1 overflow-hidden relative">
 
-              {/* Swipe Edge Hint - Micro visuel glow pour indiquer le comportement natif du swipe */}
-              {!isFocusMode && !isMobileMenuOpen && (
-                <div className="md:hidden absolute top-0 left-0 bottom-0 w-2 pointer-events-none bg-gradient-to-r from-slate-900/5 to-transparent dark:from-white/5 z-20"></div>
+              {/* Swipe Discoverability Pill (Fallback permanent jusqu'à découverte) */}
+              {!isFocusMode && !sidebarDiscovered && !isMobileMenuOpen && (
+                <div
+                  className="md:hidden fixed left-0 top-1/2 -translate-y-1/2 z-40 flex items-center justify-start min-w-[44px] min-h-[64px]"
+                  onClick={() => setIsMobileMenuOpen(true)}
+                >
+                  <div className="w-[5px] h-[56px] bg-slate-400/60 dark:bg-slate-500/60 rounded-r-full shadow-[2px_0_8px_rgba(0,0,0,0.15)]"></div>
+                </div>
               )}
 
               {view === 'settings' ?
