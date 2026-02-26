@@ -260,7 +260,7 @@ export const CommercialModule = ({
             )}
 
             {/* Header */}
-            <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-4 flex-shrink-0 flex items-center shadow-sm z-20 pl-16 md:pl-6">
+            <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-4 flex-shrink-0 flex items-center shadow-sm z-20 pl-16 md:pl-6">
                 <h2 className="text-xl font-bold text-slate-800 dark:text-white mr-auto">Commercial</h2>
 
                 {/* RIGHT ACTIONS (From AppHeader) */}
@@ -285,7 +285,7 @@ export const CommercialModule = ({
                     {/* MENU BURGER */}
                     <button
                         onClick={() => setMenuOpen(!menuOpen)}
-                        className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                        className="flex items-center justify-center min-w-[44px] min-h-[44px] bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                     >
                         <Menu size={20} />
                     </button>

@@ -694,23 +694,103 @@ const App = () => {
     setIsMobileMenuOpen(false);
   };
 
+  // --- SWIPE GESTURE LOGIC ---
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const isSwiping = useRef(false);
+
+  const handleTouchStart = (e) => {
+    // Ne détecter que le premier doigt
+    if (e.touches.length > 1) return;
+
+    // Si on est en mode focus (chantier ouvert, settings, etc.), pas de menu latéral global (ou du moins il est caché)
+    if (isFocusMode) return;
+
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+
+    // Détection d'ouverture : le swipe doit commencer proche du bord gauche (< 20px)
+    // Sauf si le menu est DÉJÀ ouvert, auquel cas on veut capter le swipe n'importe où pour fermer
+    if (!isMobileMenuOpen && touchStartX.current > 20) {
+      touchStartX.current = null;
+      touchStartY.current = null;
+    } else {
+      isSwiping.current = true;
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isSwiping.current || touchStartX.current === null || touchStartY.current === null) return;
+
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+
+    const diffX = currentX - touchStartX.current;
+    const diffY = currentY - touchStartY.current;
+
+    // Si on scrolle verticalement plus qu'on ne swipe horizontalement, on annule le swipe
+    if (Math.abs(diffY) > Math.abs(diffX)) {
+      isSwiping.current = false;
+      return;
+    }
+
+    // Bloquer le scroll natif si on swipe vraiment horizontalement
+    if (Math.abs(diffX) > 10 && e.cancelable) {
+      // e.preventDefault(); // Attention, peut causer des soucis de scroll passif dans react 18+, à utiliser avec précaution ou via ref ref.current.addEventListener(..., { passive: false })
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    if (!isSwiping.current || touchStartX.current === null) {
+      isSwiping.current = false;
+      return;
+    }
+
+    const currentX = e.changedTouches[0].clientX;
+    const diffX = currentX - touchStartX.current;
+
+    const THRESHOLD = 60; // minimum pixels to trigger
+
+    if (isMobileMenuOpen) {
+      // Menu est ouvert -> swipe GAUCHE (diffX négatif) pour fermer
+      if (diffX < -THRESHOLD) {
+        setIsMobileMenuOpen(false);
+      }
+    } else {
+      // Menu est fermé -> swipe DROITE (diffX positif) pour ouvrir
+      if (diffX > THRESHOLD) {
+        setIsMobileMenuOpen(true);
+      }
+    }
+
+    // Reset
+    touchStartX.current = null;
+    touchStartY.current = null;
+    isSwiping.current = false;
+  };
+
   return (
     <AppContext.Provider value={{ state: st, ...act, navigate: setView, setReturnView: (v) => setSt(s => ({ ...s, returnView: v })) }}>
       <ErrorBoundary>
         <Suspense fallback={<LoadingScreen />}>
-          <div className="flex bg-slate-50 dark:bg-slate-900 overflow-hidden w-full h-screen lg:h-screen supports-[height:100dvh]:h-[100dvh] relative">
+          <div
+            className="flex bg-slate-50 dark:bg-slate-900 overflow-hidden w-full h-screen lg:h-screen supports-[height:100dvh]:h-[100dvh] relative"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
             {!isFocusMode && (
               <>
                 {/* Mobile Backdrop Overlay */}
                 {isMobileMenuOpen && (
                   <div
-                    className="fixed inset-0 bg-black/50 z-40 md:hidden"
+                    className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm transition-all"
                     onClick={() => setIsMobileMenuOpen(false)}
                   />
                 )}
                 {/* Sidebar Container */}
                 <div className={`
-                  fixed md:static inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out
+                  fixed md:static inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-out
                   ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
                 `}>
                   <Sidebar currentView={view} onNavigate={handleNavigate} onClose={() => setIsMobileMenuOpen(false)} />
@@ -720,10 +800,10 @@ const App = () => {
             <main className="flex-1 overflow-hidden relative">
               {/* Mobile Header Toggle (Only visible if navigation exists and we aren't in focus mode) */}
               {!isFocusMode && (
-                <div className="md:hidden absolute top-4 left-4 z-30">
+                <div className="md:hidden absolute top-[max(1rem,env(safe-area-inset-top))] left-2 z-30">
                   <button
                     onClick={() => setIsMobileMenuOpen(true)}
-                    className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
+                    className="flex items-center justify-center p-3 min-w-[44px] min-h-[44px] bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition-colors"
                   >
                     <Menu size={20} />
                   </button>
